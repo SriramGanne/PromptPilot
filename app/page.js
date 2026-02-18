@@ -339,6 +339,12 @@ export default function Home() {
           </section>
         )}
 
+        {/* ── Disclaimer ── */}
+        <p style={s.disclaimer}>
+          Your prompts are not stored.<br />
+          Optimization powered by Google Gemma.
+        </p>
+
         {/* ── Feedback ── */}
         <div style={s.feedbackWrap}>
           <a
@@ -699,6 +705,16 @@ const s = {
     fontSize: 12,
     fontWeight: 500,
     color: C.muted,
+  },
+
+  /* Disclaimer */
+  disclaimer: {
+    marginTop: 32,
+    textAlign: "center",
+    fontSize: 12,
+    fontWeight: 400,
+    color: C.muted,
+    lineHeight: 1.8,
   },
 
   /* Feedback */
