@@ -1,0 +1,98 @@
+[
+  {
+    "title": "Chain-of-Thought (CoT)",
+    "content": "Chain-of-thought prompting enables models to decompose complex problems into intermediate steps. By explicitly asking for reasoning before the final answer, models improve accuracy in arithmetic, symbolic reasoning, and strategy. The 'Let's think step-by-step' trigger is the zero-shot version of this.",
+    "summary": "Boosts reasoning accuracy by forcing the model to explain its logic step-by-step.",
+    "category": "Reasoning",
+    "citation_url": "https://arxiv.org/abs/2201.11903",
+    "is_featured": true
+  },
+  {
+    "title": "Self-Consistency (CoT-SC)",
+    "content": "Self-consistency goes beyond CoT by sampling a diverse set of reasoning paths and then selecting the most consistent answer (marginalizing out the reasoning paths). This is particularly effective for math and logic tasks where multiple paths can lead to the same correct result.",
+    "summary": "Runs multiple 'thoughts' and picks the most frequent answer to ensure reliability.",
+    "category": "Accuracy",
+    "citation_url": "https://arxiv.org/abs/2203.11171",
+    "is_featured": true
+  },
+  {
+    "title": "Tree of Thoughts (ToT)",
+    "content": "ToT allows models to explore multiple reasoning branches simultaneously as 'thoughts'. It incorporates look-ahead and backtracking, allowing the model to evaluate the progress of different thoughts toward a solution and discard unproductive branches.",
+    "summary": "Enables complex problem solving through multi-branch exploration and backtracking.",
+    "category": "Advanced",
+    "citation_url": "https://arxiv.org/abs/2305.10601",
+    "is_featured": true
+  },
+  {
+    "title": "XML Tagging & Delimiters",
+    "content": "Structured delimiters like <context>, <instructions>, and <examples> create clear boundaries within a prompt. This prevents 'instruction drift' where the model confuses user data with system constraints, and is the standard for high-performance models like Claude and Gemma.",
+    "summary": "Uses clear structural markers to separate different parts of your prompt instructions.",
+    "category": "Structure",
+    "citation_url": "https://docs.anthropic.com/en/docs/build-with-claude/prompt-engineering/use-xml-tags",
+    "is_featured": true
+  },
+  {
+    "title": "Least-to-Most Prompting",
+    "content": "This strategy involves breaking down a problem into a series of smaller sub-problems. The model solves the simplest sub-problem first, and then uses that answer to help solve the next, more complex sub-problem, mimicking human problem-solving workflows.",
+    "summary": "Solves complex tasks by breaking them into smaller, sequential sub-problems.",
+    "category": "Reasoning",
+    "citation_url": "https://arxiv.org/abs/2205.10625",
+    "is_featured": true
+  },
+  {
+    "title": "ReAct (Reason + Act)",
+    "content": "ReAct combines reasoning traces and task-specific actions. The model 'thinks' about what it needs to do, takes an 'action' (like searching the web), 'observes' the result, and repeats. This is the foundation of modern AI Agents.",
+    "summary": "Synergizes reasoning with external actions (like searching) in an agentic loop.",
+    "category": "Agentic",
+    "citation_url": "https://arxiv.org/abs/2210.03629",
+    "is_featured": true
+  },
+  {
+    "title": "Skeleton-of-Thought (SoT)",
+    "content": "SoT is designed to reduce latency by generating the 'skeleton' of an answer first (e.g., the main bullet points) and then expanding each point in parallel. This showcases how prompt engineering can optimize for user-perceived speed.",
+    "summary": "Optimizes for speed by generating an outline first and expanding it in parts.",
+    "category": "Performance",
+    "citation_url": "https://arxiv.org/abs/2307.10735",
+    "is_featured": false
+  },
+  {
+    "title": "Chain-of-Density (CoD)",
+    "content": "CoD is a specific technique for summarization where the model iteratively identifies missing 'entity-dense' information and incorporates it into a summary without increasing the length, resulting in highly informative, compact text.",
+    "summary": "Creates information-rich summaries by iteratively adding key entities.",
+    "category": "Refinement",
+    "citation_url": "https://arxiv.org/abs/2309.04269",
+    "is_featured": true
+  },
+  {
+    "title": "Few-Shot Prompting",
+    "content": "Providing 2-5 examples of input-output pairs within the prompt. This 'in-context learning' helps the model understand the exact format and tone required, reducing the need for long, descriptive instructions.",
+    "summary": "Shows the model examples of what you want instead of just telling it.",
+    "category": "Basics",
+    "citation_url": "https://arxiv.org/abs/2005.14165",
+    "is_featured": true
+  },
+  {
+    "title": "System Persona Adoption",
+    "content": "Assigning a specific role to the model (e.g., 'You are a Senior Python Developer'). Research shows that providing a persona sets a latent space of relevant knowledge and adjusts the vocabulary and 'carefulness' of the model's output.",
+    "summary": "Improves output quality by giving the AI a specific professional context.",
+    "category": "Structure",
+    "citation_url": "https://arxiv.org/abs/2305.14688",
+    "is_featured": true
+  },
+  {
+    "title": "Emotional Stimuli (EmotionPrompt)",
+    "content": "Studies show that adding phrases like 'This is very important for my career' or 'Take a deep breath and work on this' can actually improve performance on truthfulness and reasoning tasks in LLMs.",
+    "summary": "Uses specific social/emotional cues to improve model focus and accuracy.",
+    "category": "Behavioral",
+    "citation_url": "https://arxiv.org/abs/2307.11760",
+    "is_featured": false
+  },
+  {
+    "title": "Meta-Prompting",
+    "content": "Using the LLM to write or refine its own prompts. This involves giving the model a high-level goal and asking it to generate the optimal system instructions to achieve that goal.",
+    "summary": "Using AI to design and optimize the prompt itself—the core of PromptBuddy.",
+    "category": "Advanced",
+    "citation_url": "https://arxiv.org/abs/2311.11432",
+    "is_featured": true
+  }
+]
