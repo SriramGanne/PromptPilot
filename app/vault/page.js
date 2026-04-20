@@ -8,7 +8,7 @@ import VaultClient from "./VaultClient";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Knowledge Vault · PromptBuddy",
+  title: "Knowledge Vault · PromptPilot",
   description:
     "Curated research on prompting techniques — Reasoning, Structure, Style.",
 };
@@ -46,7 +46,7 @@ export default async function VaultPage() {
             <Link href="/" className="flex items-center gap-2.5">
               <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-accent to-accent-2 shadow-[0_4px_14px_rgba(124,58,237,0.45)]" />
               <span className="text-[17px] font-semibold tracking-tight text-text">
-                PromptBuddy
+                PromptPilot
               </span>
             </Link>
             <div className="hidden sm:block">

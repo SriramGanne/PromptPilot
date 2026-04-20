@@ -101,7 +101,7 @@
   {
     "title": "Meta-Prompting",
     "content": "Using the LLM to write or refine its own prompts. This involves giving the model a high-level goal and asking it to generate the optimal system instructions to achieve that goal.",
-    "summary": "Using AI to design and optimize the prompt itself — the core of PromptBuddy.",
+    "summary": "Using AI to design and optimize the prompt itself — the core of PromptPilot.",
     "best_for": "Iteratively refining prompts for recurring workflows or agent pipelines.",
     "category": "Advanced",
     "citation_url": "https://arxiv.org/abs/2311.11432",

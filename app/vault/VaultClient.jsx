@@ -49,22 +49,22 @@ export default function VaultClient({ entries, error }) {
 
   return (
     <div>
-      {/* ── Hero ──────────────────────────────────────────────────────── */}
-      <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight text-text">
-            Knowledge Vault
-          </h1>
-          <p className="mt-2 max-w-2xl text-sm text-text">
-            <span className="font-semibold text-accent-2">The Research Lab:</span>{" "}
-            Explore the academic papers and industry best practices that power
-            our optimization engine.
-          </p>
-          <p className="mt-2 max-w-2xl text-sm text-text-muted">
-            Search or filter by category to explore what's in the corpus —
-            every entry grounds the RAG layer of every optimization.
-          </p>
-        </div>
+      {/* ── Hero ──────────────────────────────────────────────────────────
+          Centered to match the Optimiser hero — same type scale + muted
+          secondary line so the two tabs read as a coherent product. */}
+      <div className="mx-auto mb-10 max-w-2xl text-center">
+        <h1 className="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
+          Knowledge Vault
+        </h1>
+        <p className="mt-3 text-lg leading-relaxed text-text-muted">
+          <span className="font-semibold text-accent-2">The Research Lab:</span>{" "}
+          Explore the academic papers and industry best practices that power
+          our optimization engine.
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-text-dim">
+          Search or filter by category to explore what's in the corpus —
+          every entry grounds the RAG layer of every optimization.
+        </p>
       </div>
 
       {/* ── Search + category filter ──────────────────────────────────── */}
