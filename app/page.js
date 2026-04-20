@@ -291,25 +291,28 @@ export default function Home() {
     <div className="min-h-screen text-text">
       <Header powerMode={powerMode} setPowerMode={setPowerMode} />
 
+      {/* ── Hero ──────────────────────────────────────────────────────────
+          Dedicated marketing hero that spans the full content width, sitting
+          between the global header (NavTabs live there) and the wizard grid.
+          Kept outside <main>'s responsive grid so the tagline is centered
+          across both columns when Power Mode is on. */}
+      <section className="mx-auto w-full max-w-[1280px] px-6 pt-10 pb-2 text-center">
+        <h1 className="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
+          PromptPilot
+        </h1>
+        <p className="mx-auto mt-3 max-w-2xl text-lg leading-relaxed text-text-muted">
+          Built for non-technical professionals who want expert-quality LLM
+          output without learning prompt engineering.
+        </p>
+      </section>
+
       <main
-        className={`mx-auto w-full max-w-[1280px] px-6 pb-20 pt-8 grid gap-8 transition-[grid-template-columns] duration-300 ease-out ${
+        className={`mx-auto w-full max-w-[1280px] px-6 pb-20 pt-6 grid gap-8 transition-[grid-template-columns] duration-300 ease-out ${
           powerMode ? "grid-cols-1 lg:grid-cols-[1fr_350px]" : "grid-cols-1"
         }`}
       >
         {/* ── Wizard column ───────────────────────────────────────────── */}
         <section className="min-w-0">
-          {/* Hero — product name + tagline. Sits above the stepper so the
-              positioning statement reads as branding, not form copy. */}
-          <div className="mb-8">
-            <h1 className="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
-              PromptBuddy
-            </h1>
-            <p className="mt-2 max-w-2xl text-[15px] leading-relaxed text-text-muted sm:text-base">
-              Built for non-technical professionals who want expert-quality LLM
-              output without learning prompt engineering.
-            </p>
-          </div>
-
           <Stepper currentStep={step} />
 
           <div className="mt-8 rounded-2xl border border-border bg-surface/80 backdrop-blur-sm shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">
@@ -388,7 +391,7 @@ function Header({ powerMode, setPowerMode }) {
           <Link href="/" className="flex items-center gap-2.5">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-accent to-accent-2 shadow-[0_4px_14px_rgba(124,58,237,0.45)]" />
             <span className="text-[17px] font-semibold tracking-tight text-text">
-              PromptBuddy
+              PromptPilot
             </span>
           </Link>
           <div className="hidden sm:block">
@@ -626,14 +629,17 @@ function StepClarification({
           ← Back
         </button>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Ghost-styled secondary action: transparent bg, no border until
+              hover. Intentionally low-weight so it doesn't compete with the
+              primary "Generate prompt" CTA to its right. */}
           <button
             type="button"
             onClick={onSkip}
             disabled={isPending}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-border bg-surface-2 px-4 py-2.5 text-sm font-medium text-text-muted transition hover:border-accent/50 hover:text-text disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-transparent px-4 py-2.5 text-sm font-medium text-text-dim transition hover:border-border hover:bg-surface-2/60 hover:text-text-muted disabled:cursor-not-allowed disabled:opacity-40"
             title="Generate now without answering the questions"
           >
-            Skip & Generate
+            Skip &amp; Generate with current info
           </button>
           <button
             type="submit"
