@@ -1,4 +1,4 @@
-# PromptBuddy
+# PromptPilot
 
 A high-end Prompt Engineering Agent that transforms raw intent into production-ready prompts using an agentic RAG pipeline, semantic caching, and 2026 reasoning markers.
 
