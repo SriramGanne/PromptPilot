@@ -25,7 +25,6 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 * **Vector Database:** `Supabase (pgvector)` storing 1024-dimension embeddings.
 * **Embedding Model:** `intfloat/multilingual-e5-large-instruct` (utilizing `passage:`/`query:` instruction prefixes).
 * **Semantic Cache:** `Upstash Redis` to reduce COGS and latency for redundant high-intent queries.
-* **Quality Gate:** Internal **LLM-as-a-Judge** framework using **Claude Sonnet 4.6** to audit faithfulness and structural integrity.
 
 ### Evaluator-Optimizer Design Pattern
 PromptPilot doesn't just "guess." It follows a closed-loop system:
