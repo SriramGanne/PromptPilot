@@ -2,6 +2,75 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { supabase, searchResearch } from "../../../lib/supabase";
 import { getCachedResult, setCachedResult } from "../../../lib/semanticCache";
+import { enforceRateLimit, getClientIp } from "../../../lib/ratelimit";
+
+// ---------------------------------------------------------------------------
+// Input validation constants
+// ---------------------------------------------------------------------------
+
+const ALLOWED_TARGET_MODELS = ["ChatGPT", "Claude", "Gemini", "Grok"];
+const MIN_INPUT_LEN = 3;
+const MAX_INPUT_LEN = 4000;   // ~3000 tokens max — covers any realistic intent
+const EXPECTED_EMBED_DIM = 1024;
+
+// Tokens/markers that only our system prompt should emit. If a user's raw
+// intent contains any of these, a clever attacker could trick the client-side
+// parser into attributing their text to a privileged section (e.g. making
+// "### PROMPT START" bogus content appear as the official output).
+const PROMPT_INJECTION_MARKERS = [
+  /### ?PROMPT ?START/gi,
+  /### ?PROMPT ?END/gi,
+  /<\/?thinking>/gi,
+  /<\/?context_grounding>/gi,
+  /<\/?eval_prediction>/gi,
+];
+
+function sanitizeUserInput(text) {
+  let out = text;
+  for (const re of PROMPT_INJECTION_MARKERS) out = out.replace(re, "[redacted]");
+  return out;
+}
+
+/**
+ * Validate + normalize the incoming POST body.
+ * Returns { ok: true, userInput, targetModel, skipClarification } or
+ * { ok: false, status, error } on failure. Errors returned here are safe to
+ * surface to the client — they describe the client's own mistake, not our
+ * internals.
+ */
+function validateBody(body) {
+  if (!body || typeof body !== "object") {
+    return { ok: false, status: 400, error: "Request body must be a JSON object." };
+  }
+  const { userInput, targetModel, skipClarification } = body;
+
+  if (typeof userInput !== "string") {
+    return { ok: false, status: 400, error: "userInput must be a string." };
+  }
+  const trimmed = userInput.trim();
+  if (trimmed.length < MIN_INPUT_LEN) {
+    return { ok: false, status: 400, error: `userInput must be at least ${MIN_INPUT_LEN} characters.` };
+  }
+  if (trimmed.length > MAX_INPUT_LEN) {
+    return { ok: false, status: 413, error: `userInput exceeds ${MAX_INPUT_LEN} character limit.` };
+  }
+  if (typeof targetModel !== "string" || !ALLOWED_TARGET_MODELS.includes(targetModel)) {
+    return {
+      ok: false,
+      status: 400,
+      error: `targetModel must be one of: ${ALLOWED_TARGET_MODELS.join(", ")}.`,
+    };
+  }
+
+  return {
+    ok: true,
+    userInput: sanitizeUserInput(trimmed),
+    targetModel,
+    // Strict boolean check — reject string "true"/"false" and any other truthy
+    // value, so attackers can't cheaply bypass gap analysis.
+    skipClarification: skipClarification === true,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Clients
@@ -134,8 +203,22 @@ async function analyzeGaps(userInput) {
   const parsed = extractJSON(raw);
 
   if (!parsed) {
-    console.warn("Gap analysis JSON parse failed; defaulting to sufficient=true. Raw:", raw);
-    return { sufficient: true, clarityScore: 0.75, questions: [], missingDimensions: [] };
+    // Default to INSUFFICIENT on parse failure — not sufficient. The prior
+    // default let adversarial inputs (that made Gemma emit prose instead of
+    // JSON) bypass the cheap gatekeeper and force the expensive synthesis
+    // path on every call. A generic clarifying question is the correct
+    // fail-safe: cheap, informative to the user, and not exploitable.
+    console.warn("Gap analysis JSON parse failed; defaulting to sufficient=false. Raw:", raw);
+    return {
+      sufficient: false,
+      clarityScore: 0.5,
+      questions: [
+        "Who is the intended audience for the output?",
+        "What format or structure should the output take?",
+        "Are there any specific constraints or requirements to follow?",
+      ],
+      missingDimensions: ["target_audience", "output_format", "task_constraints"],
+    };
   }
 
   return {
@@ -157,7 +240,16 @@ async function embedQuery(text) {
     model: EMBEDDING_MODEL,
     input: `query: ${text}`,
   });
-  return response.data[0].embedding;
+  const embedding = response.data[0].embedding;
+  // Hard assert: if Together returns a differently-sized vector (provider hiccup
+  // or silent model swap), cosineSimilarity would silently produce NaN and we'd
+  // pollute the cache + fail the Supabase RPC. Fail loudly instead.
+  if (!Array.isArray(embedding) || embedding.length !== EXPECTED_EMBED_DIM) {
+    throw new Error(
+      `Embedding dimension mismatch: expected ${EXPECTED_EMBED_DIM}, got ${embedding?.length ?? "invalid"}`
+    );
+  }
+  return embedding;
 }
 
 // ---------------------------------------------------------------------------
@@ -282,6 +374,30 @@ function computeFaithfulness(ragChunks, output) {
 // ---------------------------------------------------------------------------
 
 export async function POST(request) {
+  // ── Rate limiting ─────────────────────────────────────────────────────
+  // Must run BEFORE body parse / LLM calls so an attacker burning requests
+  // doesn't cost us anything beyond one cheap Redis round-trip.
+  const ip = getClientIp(request);
+  const rl = await enforceRateLimit(ip).catch((err) => {
+    // Fail open on rate-limiter errors — better to accept a flood than to
+    // hard-fail legitimate traffic if Upstash has a hiccup. Log loudly so
+    // we notice.
+    console.error("Rate limiter error (failing open):", err.message);
+    return { ok: true };
+  });
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        error: rl.scope === "daily"
+          ? "Daily limit reached. Please try again tomorrow."
+          : "You're going too fast. Please wait a moment and try again.",
+        retryAfterSec: rl.retryAfterSec,
+      },
+      { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
+    );
+  }
+
+  // ── Body parse + validation ───────────────────────────────────────────
   let body;
   try {
     body = await request.json();
@@ -289,13 +405,11 @@ export async function POST(request) {
     return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
   }
 
-  const { userInput, targetModel, skipClarification } = body;
-  if (!userInput || !targetModel) {
-    return NextResponse.json(
-      { error: "userInput and targetModel are required." },
-      { status: 400 }
-    );
+  const v = validateBody(body);
+  if (!v.ok) {
+    return NextResponse.json({ error: v.error }, { status: v.status });
   }
+  const { userInput, targetModel, skipClarification } = v;
 
   const encoder = new TextEncoder();
 
@@ -387,6 +501,22 @@ export async function POST(request) {
           }
         }
 
+        // ── Output shape guard ────────────────────────────────────────────
+        // If the LLM refused the request or hallucinated a different format,
+        // `### PROMPT START` will be absent. Don't cache, don't log metrics,
+        // and surface a user-friendly error. Caching malformed output would
+        // pollute future lookups and show "No prompt returned" to users who
+        // hit the 0.9-similarity bucket.
+        if (!/### ?PROMPT ?START/i.test(fullOutput)) {
+          console.warn("Synthesis produced no PROMPT START marker. Output head:", fullOutput.slice(0, 200));
+          send({
+            type: "error",
+            error: "The model didn't return a usable prompt. Please try rephrasing your intent.",
+          });
+          controller.close();
+          return;
+        }
+
         // ── Final metrics ─────────────────────────────────────────────────
         const optimizedTokens = estimateTokens(fullOutput);
         const reductionPercent =
@@ -431,8 +561,15 @@ export async function POST(request) {
             if (dbErr) console.error("Supabase log error:", dbErr.message);
           });
       } catch (err) {
+        // Log the full error server-side for debugging, but return a GENERIC
+        // message to the client. Supabase/Together/Upstash errors can leak
+        // schema names, RLS hints, model IDs, or rate-limit internals — none
+        // of which the browser needs and all of which help an attacker.
         console.error("Orchestrate error:", err);
-        send({ type: "error", error: err.message || "Internal server error" });
+        send({
+          type: "error",
+          error: "Something went wrong while generating your prompt. Please try again.",
+        });
         controller.close();
       }
     },

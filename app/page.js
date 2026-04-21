@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import NavTabs from "./_components/NavTabs";
+import BrandMark from "./_components/BrandMark";
 
 const TARGET_MODELS = ["ChatGPT", "Claude", "Gemini", "Grok"];
 const STEPS = [
@@ -78,6 +79,13 @@ export default function Home() {
   const resultRef = useRef(null);      // Improved Prompt panel — scrolled into view on generation
   const didAutoScrollRef = useRef(false); // one-shot guard so we don't re-scroll on every token
   const returnToIntentRef = useRef(false); // set by handleStartOver, consumed by useEffect below
+  // Controller for the in-flight /api/orchestrate fetch. We abort it on:
+  //   - Start Over      → user doesn't care about the current run
+  //   - unmount          → user navigated away (prevents paid token burn)
+  //   - starting a new run → callApi() replaces any existing controller
+  // Without this, a user who hits Start Over mid-generation keeps the server
+  // streaming tokens to /dev/null — we pay Together AI for output nobody sees.
+  const abortRef = useRef(null);
 
   // Transient "generation complete" flag — drives a fade-out border pulse.
   const [justCompleted, setJustCompleted] = useState(false);
@@ -118,11 +126,29 @@ export default function Home() {
     }
   }, [step]);
 
+  // Kill any in-flight fetch when the component unmounts (user navigates to
+  // /vault, closes the tab, etc.) so the server stops streaming to a client
+  // that will never read the response.
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+      abortRef.current = null;
+    };
+  }, []);
+
   // Streaming NDJSON reader. The server emits one event per line:
   //   clarifying | cached | meta | token | done | error
   // We update state incrementally so the optimized prompt renders as it is
   // generated, not after the full synthesis completes.
   async function callApi(userInput, { skipClarification = false } = {}) {
+    // Abort any in-flight request from a previous run before starting a new
+    // one. The signal is passed to fetch, so the browser tears down the TCP
+    // stream and Node's ReadableStream errors on the server, which ends the
+    // Together AI streaming loop early.
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     setError("");
     setResult(null); // clear prior run — critical so stale optimized prompt
                      //                   doesn't flash while we await clarifying
@@ -132,13 +158,32 @@ export default function Home() {
     setJustCompleted(false);
     didAutoScrollRef.current = false; // re-arm auto-scroll for this run
 
-    const res = await fetch("/api/orchestrate", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userInput, targetModel, skipClarification }),
-    });
+    let res;
+    try {
+      res = await fetch("/api/orchestrate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userInput, targetModel, skipClarification }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      // AbortError is expected whenever the user starts over / unmounts — it
+      // isn't a real error, so we swallow it silently. Anything else gets
+      // surfaced.
+      if (err.name === "AbortError") return;
+      setError("Network error. Please check your connection and try again.");
+      return;
+    }
     if (!res.ok || !res.body) {
-      setError(`Request failed (${res.status})`);
+      // Try to surface the server's user-friendly error message (set by the
+      // validators / rate limiter). Fall back to a generic string on parse
+      // failure so we never block the UI.
+      let serverMsg = null;
+      try {
+        const errBody = await res.json();
+        serverMsg = errBody?.error ?? null;
+      } catch { /* not JSON — ignore */ }
+      setError(serverMsg || `Request failed (${res.status})`);
       return;
     }
 
@@ -200,21 +245,33 @@ export default function Home() {
       }
     };
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        try {
-          applyEvent(JSON.parse(trimmed));
-        } catch {
-          // malformed line — skip, keep stream alive
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
+          try {
+            applyEvent(JSON.parse(trimmed));
+          } catch {
+            // malformed line — skip, keep stream alive
+          }
         }
       }
+    } catch (err) {
+      // Aborted by Start Over / unmount — expected, not an error. Anything
+      // else is a real network hiccup mid-stream.
+      if (err.name !== "AbortError") {
+        setError("Stream interrupted. Please try again.");
+      }
+    } finally {
+      // Only clear the ref if it's still ours — callApi() may have already
+      // been called again and installed a new controller.
+      if (abortRef.current === controller) abortRef.current = null;
     }
   }
 
@@ -255,6 +312,10 @@ export default function Home() {
   }
 
   function handleStartOver() {
+    // Kill any in-flight generation so we stop paying for tokens the user
+    // will never see.
+    abortRef.current?.abort();
+    abortRef.current = null;
     returnToIntentRef.current = true; // consumed by useEffect on [step]
     setStep(1);
     setQuestions([]);
@@ -287,22 +348,29 @@ export default function Home() {
     } catch { /* clipboard denied — silent */ }
   }
 
+  // "Agentic process is active" whenever we're waiting on the server —
+  // either the fetch is in-flight (isPending) or we're streaming tokens.
+  // Drives the pulse on both the navbar brand-mark and the hero logo.
+  const isRefining = isPending || Boolean(result?.streaming);
+
   return (
     <div className="min-h-screen text-text">
-      <Header powerMode={powerMode} setPowerMode={setPowerMode} />
+      <Header
+        powerMode={powerMode}
+        setPowerMode={setPowerMode}
+        isRefining={isRefining}
+      />
 
       {/* ── Hero ──────────────────────────────────────────────────────────
-          Dedicated marketing hero that spans the full content width, sitting
-          between the global header (NavTabs live there) and the wizard grid.
-          Kept outside <main>'s responsive grid so the tagline is centered
-          across both columns when Power Mode is on. */}
-      <section className="mx-auto w-full max-w-[1280px] px-6 pt-10 pb-2 text-center">
+          Type scale + top padding mirror the Knowledge Vault hero exactly
+          so switching tabs doesn't cause vertical jump. Title is clean
+          white; subtitle carries the purple accent for focus. */}
+      <section className="mx-auto w-full max-w-2xl px-6 pt-10 pb-4 text-center">
         <h1 className="text-3xl font-semibold tracking-tight text-text sm:text-4xl">
-          PromptPilot
+          Expert-Quality LLM Output
         </h1>
-        <p className="mx-auto mt-3 max-w-2xl text-lg leading-relaxed text-text-muted">
-          Built for non-technical professionals who want expert-quality LLM
-          output without learning prompt engineering.
+        <p className="mt-3 text-lg leading-relaxed text-accent-2">
+          For non-technical professionals — without learning prompt engineering.
         </p>
       </section>
 
@@ -383,14 +451,16 @@ export default function Home() {
 // Header
 // ═══════════════════════════════════════════════════════════════════════════
 
-function Header({ powerMode, setPowerMode }) {
+function Header({ powerMode, setPowerMode, isRefining }) {
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-bg/80 backdrop-blur-md">
       <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-6 py-4">
         <div className="flex items-center gap-6">
-          <Link href="/" className="flex items-center gap-2.5">
-            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-accent to-accent-2 shadow-[0_4px_14px_rgba(124,58,237,0.45)]" />
-            <span className="text-[17px] font-semibold tracking-tight text-text">
+          <Link href="/" className="flex items-center gap-3" aria-label="PromptPilot home">
+            {/* Logo pulses softly whenever an agentic run is active, so
+                even the navbar signals that work is in flight. */}
+            <BrandMark height={36} loading={isRefining} priority />
+            <span className="text-lg font-bold tracking-tight text-white">
               PromptPilot
             </span>
           </Link>

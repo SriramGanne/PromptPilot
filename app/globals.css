@@ -82,3 +82,19 @@ body {
   0%   { box-shadow: 0 0 0 0 rgba(124, 58, 237, 0.5); }
   100% { box-shadow: 0 0 0 12px rgba(124, 58, 237, 0); }
 }
+/* Brand-mark pulse — soft purple glow around the logo while the agentic
+   pipeline is working. drop-shadow (not box-shadow) so the halo traces the
+   logo's alpha silhouette, not its bounding box. Two stacked shadows give
+   the effect depth: a tight inner + a looser outer bloom. */
+@keyframes brand-pulse {
+  0%, 100% {
+    filter:
+      drop-shadow(0 0 2px rgba(168, 85, 247, 0.35))
+      drop-shadow(0 0 6px rgba(124, 58, 237, 0.25));
+  }
+  50% {
+    filter:
+      drop-shadow(0 0 6px rgba(168, 85, 247, 0.85))
+      drop-shadow(0 0 18px rgba(124, 58, 237, 0.65));
+  }
+}

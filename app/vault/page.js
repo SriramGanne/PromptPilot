@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { supabase } from "../../lib/supabase";
 import NavTabs from "../_components/NavTabs";
+import BrandMark from "../_components/BrandMark";
 import VaultClient from "./VaultClient";
 
 // Always fetch fresh on request — the vault is editorial content that
@@ -34,7 +35,10 @@ export default async function VaultPage() {
     if (dbError) throw dbError;
     entries = data ?? [];
   } catch (err) {
-    error = err.message ?? "Failed to load vault entries.";
+    // Log details server-side; return a generic message to the browser. Raw
+    // Supabase errors can reveal schema hints, missing columns, or RLS state.
+    console.error("Vault load failed:", err);
+    error = "Could not load the knowledge vault right now. Please try again later.";
   }
 
   return (
@@ -43,9 +47,9 @@ export default async function VaultPage() {
       <header className="sticky top-0 z-30 border-b border-border/60 bg-bg/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-6 py-4">
           <div className="flex items-center gap-6">
-            <Link href="/" className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-accent to-accent-2 shadow-[0_4px_14px_rgba(124,58,237,0.45)]" />
-              <span className="text-[17px] font-semibold tracking-tight text-text">
+            <Link href="/" className="flex items-center gap-3" aria-label="PromptPilot home">
+              <BrandMark height={36} priority />
+              <span className="text-lg font-bold tracking-tight text-white">
                 PromptPilot
               </span>
             </Link>
