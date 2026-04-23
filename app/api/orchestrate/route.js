@@ -391,6 +391,8 @@ export async function POST(request) {
         error: rl.scope === "daily"
           ? "Daily limit reached. Please try again tomorrow."
           : "You're going too fast. Please wait a moment and try again.",
+        stage: "validation",
+        code: rl.scope === "daily" ? "RATE_LIMIT_DAILY" : "RATE_LIMIT_BURST",
         retryAfterSec: rl.retryAfterSec,
       },
       { status: 429, headers: { "Retry-After": String(rl.retryAfterSec) } }
@@ -407,7 +409,10 @@ export async function POST(request) {
 
   const v = validateBody(body);
   if (!v.ok) {
-    return NextResponse.json({ error: v.error }, { status: v.status });
+    return NextResponse.json(
+      { error: v.error, stage: "validation", code: "INVALID_INPUT" },
+      { status: v.status }
+    );
   }
   const { userInput, targetModel, skipClarification } = v;
 
@@ -418,18 +423,35 @@ export async function POST(request) {
       const send = (obj) =>
         controller.enqueue(encoder.encode(JSON.stringify(obj) + "\n"));
 
+      // Per-stage error emitter. Logs the raw error server-side (visible in
+      // Vercel function logs as `[generate] <stage>`) and emits a structured
+      // NDJSON error event the client can render verbatim. We deliberately
+      // ship `stage` + `code` — useful for debugging — but keep the raw
+      // error message out of `error` (that string is user-facing).
+      const stageFail = (stage, err, userMessage) => {
+        console.error("[generate]", stage, err);
+        send({
+          type: "error",
+          stage,
+          code: err?.code || "STAGE_ERROR",
+          error: userMessage,
+        });
+        controller.close();
+      };
+
+      // ── Parallel: gap analysis + query embedding ──────────────────────
+      // Gap analysis decides whether we even synthesize. The embedding
+      // is needed for BOTH the semantic cache lookup and RAG retrieval.
+      // Running them concurrently saves ~150–300ms on the happy path.
+      // If the gap returns "insufficient", we discard the unused embedding.
+      //
+      // skipClarification bypasses gap analysis entirely — used when the
+      // user clicks "Skip & Generate" on the clarification step, or on any
+      // re-submission after a clarifying round. Prevents infinite loops
+      // and lets users force a generation with whatever detail they have.
+      let gap, queryEmbedding;
       try {
-        // ── Parallel: gap analysis + query embedding ──────────────────────
-        // Gap analysis decides whether we even synthesize. The embedding
-        // is needed for BOTH the semantic cache lookup and RAG retrieval.
-        // Running them concurrently saves ~150–300ms on the happy path.
-        // If the gap returns "insufficient", we discard the unused embedding.
-        //
-        // skipClarification bypasses gap analysis entirely — used when the
-        // user clicks "Skip & Generate" on the clarification step, or on any
-        // re-submission after a clarifying round. Prevents infinite loops
-        // and lets users force a generation with whatever detail they have.
-        const [gap, queryEmbedding] = await Promise.all([
+        [gap, queryEmbedding] = await Promise.all([
           skipClarification
             ? Promise.resolve({
                 sufficient: true,
@@ -440,6 +462,15 @@ export async function POST(request) {
             : analyzeGaps(userInput),
           embedQuery(userInput),
         ]);
+      } catch (err) {
+        return stageFail(
+          "llm",
+          err,
+          "Our reasoning model couldn't analyse your intent. Please try again in a moment."
+        );
+      }
+
+      try {
 
         if (!gap.sufficient) {
           send({
@@ -481,24 +512,35 @@ export async function POST(request) {
         });
 
         // ── Streamed synthesis ────────────────────────────────────────────
-        const completion = await together.chat.completions.create({
-          model: REASONING_MODEL,
-          messages: [
-            { role: "system", content: buildSynthesisSystem(targetModel, ragChunks) },
-            { role: "user", content: userInput },
-          ],
-          temperature: 0.4,
-          max_tokens: 1800,
-          stream: true,
-        });
-
+        // Isolated try/catch: a Together AI stream abort, quota error, or
+        // network blip during token iteration must surface as stage "llm"
+        // with a targeted message instead of the generic catch-all below.
         let fullOutput = "";
-        for await (const chunk of completion) {
-          const delta = chunk.choices?.[0]?.delta?.content ?? "";
-          if (delta) {
-            fullOutput += delta;
-            send({ type: "token", content: delta });
+        try {
+          const completion = await together.chat.completions.create({
+            model: REASONING_MODEL,
+            messages: [
+              { role: "system", content: buildSynthesisSystem(targetModel, ragChunks) },
+              { role: "user", content: userInput },
+            ],
+            temperature: 0.4,
+            max_tokens: 1800,
+            stream: true,
+          });
+
+          for await (const chunk of completion) {
+            const delta = chunk.choices?.[0]?.delta?.content ?? "";
+            if (delta) {
+              fullOutput += delta;
+              send({ type: "token", content: delta });
+            }
           }
+        } catch (err) {
+          return stageFail(
+            "llm",
+            err,
+            "The synthesis model failed mid-stream. Please try again — if it persists, shorten your intent."
+          );
         }
 
         // ── Output shape guard ────────────────────────────────────────────
@@ -508,9 +550,11 @@ export async function POST(request) {
         // pollute future lookups and show "No prompt returned" to users who
         // hit the 0.9-similarity bucket.
         if (!/### ?PROMPT ?START/i.test(fullOutput)) {
-          console.warn("Synthesis produced no PROMPT START marker. Output head:", fullOutput.slice(0, 200));
+          console.warn("[generate] llm produced no PROMPT START marker. Output head:", fullOutput.slice(0, 200));
           send({
             type: "error",
+            stage: "llm",
+            code: "MALFORMED_OUTPUT",
             error: "The model didn't return a usable prompt. Please try rephrasing your intent.",
           });
           controller.close();
@@ -561,13 +605,16 @@ export async function POST(request) {
             if (dbErr) console.error("Supabase log error:", dbErr.message);
           });
       } catch (err) {
-        // Log the full error server-side for debugging, but return a GENERIC
-        // message to the client. Supabase/Together/Upstash errors can leak
-        // schema names, RLS hints, model IDs, or rate-limit internals — none
-        // of which the browser needs and all of which help an attacker.
-        console.error("Orchestrate error:", err);
+        // Final safety net — anything that escaped the per-stage handlers
+        // (e.g. an unexpected throw in the metrics block, a cache/RAG path
+        // that stopped swallowing errors, a programming bug). We still keep
+        // the raw `err.message` out of the user payload — only `stage` +
+        // `code` travel to the client. Full error goes to Vercel logs.
+        console.error("[generate] unknown", err);
         send({
           type: "error",
+          stage: "unknown",
+          code: "UNEXPECTED",
           error: "Something went wrong while generating your prompt. Please try again.",
         });
         controller.close();
