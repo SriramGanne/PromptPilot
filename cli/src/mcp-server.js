@@ -9,6 +9,24 @@ import { getEmbeddingAndCacheHit } from './pipeline/embedAndCache.js';
 import { retrieveRagContext } from './pipeline/ragRetrieval.js';
 import { synthesize } from './pipeline/synthesis.js';
 
+// Structural markers that only the system prompt should emit. Strip them from
+// user input so an attacker cannot inject fake "### PROMPT START" sections.
+const INJECTION_MARKERS = [
+  /### ?PROMPT ?START/gi,
+  /### ?PROMPT ?END/gi,
+  /<\/?thinking>/gi,
+  /<\/?context_grounding>/gi,
+  /<\/?eval_prediction>/gi,
+];
+
+function sanitizeRawPrompt(text) {
+  return INJECTION_MARKERS.reduce((t, re) => t.replace(re, '[redacted]'), text);
+}
+
+// Only these keys are valid in state.json — prevents poisoned state from
+// leaking attacker-controlled data into later CLI reads.
+const ALLOWED_STATE_KEYS = new Set(['lastRunAt']);
+
 function writeState(data) {
   try {
     const dir = join(homedir(), '.promptpilot');
@@ -16,9 +34,18 @@ function writeState(data) {
     const statePath = join(dir, 'state.json');
     let existing = {};
     if (existsSync(statePath)) {
-      try { existing = JSON.parse(readFileSync(statePath, 'utf8')); } catch { /* ignore */ }
+      try {
+        const parsed = JSON.parse(readFileSync(statePath, 'utf8'));
+        for (const key of ALLOWED_STATE_KEYS) {
+          if (key in parsed) existing[key] = parsed[key];
+        }
+      } catch { /* ignore */ }
     }
-    writeFileSync(statePath, JSON.stringify({ ...existing, ...data }, null, 2));
+    const safeData = {};
+    for (const key of ALLOWED_STATE_KEYS) {
+      if (key in data) safeData[key] = data[key];
+    }
+    writeFileSync(statePath, JSON.stringify({ ...existing, ...safeData }, null, 2));
   } catch { /* non-fatal */ }
 }
 
@@ -68,7 +95,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
-  const rawPrompt = args?.rawPrompt;
+  const rawPrompt = sanitizeRawPrompt(args?.rawPrompt ?? '');
   const targetModel = args?.targetModel ?? 'Claude';
   const skipClarification = args?.skipClarification === true;
 

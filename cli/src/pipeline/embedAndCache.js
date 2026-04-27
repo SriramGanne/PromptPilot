@@ -7,6 +7,27 @@ const EXPECTED_EMBED_DIM = 1024;
 const CACHE_HASH_KEY = 'promptbuddy:cache';
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 const SIMILARITY_THRESHOLD = 0.9;
+const MAX_CACHED_PROMPT_LEN = 8000;
+
+// Allowlist of keys that may come from a cached payload. Prevents a
+// compromised Redis instance from injecting arbitrary fields into the
+// MCP response that Claude Code acts on as instructions.
+const ALLOWED_PAYLOAD_KEYS = new Set([
+  'optimizedPrompt', 'clarityScore', 'ragSources',
+  'faithfulnessScore', 'cacheHit', 'originalTokens',
+  'optimizedTokens', 'cacheSimilarity',
+]);
+
+function validateCachedPayload(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (typeof raw.optimizedPrompt !== 'string') return null;
+  if (raw.optimizedPrompt.length > MAX_CACHED_PROMPT_LEN) return null;
+  const safe = {};
+  for (const key of ALLOWED_PAYLOAD_KEYS) {
+    if (key in raw) safe[key] = raw[key];
+  }
+  return safe;
+}
 
 function cosineSimilarity(a, b) {
   let dot = 0, normA = 0, normB = 0;
@@ -55,8 +76,10 @@ async function getCachedResult(redis, embedding, targetModel) {
 
     const similarity = cosineSimilarity(embedding, entry.embedding);
     if (similarity >= SIMILARITY_THRESHOLD && similarity > bestSimilarity) {
+      const validated = validateCachedPayload(entry.payload);
+      if (!validated) continue;
       bestSimilarity = similarity;
-      bestPayload = { ...entry.payload, cacheHit: true, cacheSimilarity: similarity };
+      bestPayload = { ...validated, cacheHit: true, cacheSimilarity: similarity };
     }
   }
 
