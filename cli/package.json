@@ -24,13 +24,13 @@
     "rag",
     "llm"
   ],
-  "author": "Kalyan Krapa <krapa.kalyan@gmail.com>",
+  "author": "Sriram Ganne <ram_sphinx@hotmail.com>",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Krapa007/PromptPilot.git"
+    "url": "https://github.com/SriramGanne/PromptPilot.git"
   },
-  "homepage": "https://github.com/Krapa007/PromptPilot",
+  "homepage": "https://github.com/SriramGanne/PromptPilot",
   "engines": {
     "node": ">=18.0.0"
   },

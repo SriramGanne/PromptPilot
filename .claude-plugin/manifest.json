@@ -2,7 +2,7 @@
   "name": "promptpilot",
   "version": "1.0.0",
   "description": "Intercepts every user prompt, runs it through a RAG-grounded LLM pipeline (gap analysis → semantic cache → retrieval → synthesis), and returns a fully optimized, production-ready prompt for Claude to act on.",
-  "author": "Kalyan Krapa",
+  "author": "Sriram Ganne",
   "icon": "🧠",
   "mcpServers": {
     "promptpilot": {
