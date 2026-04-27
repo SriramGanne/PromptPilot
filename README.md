@@ -23,18 +23,70 @@ Most users struggle with **Instruction Drift** and **Prompt Ambiguity**. While f
 
 ## 🏗️ Technical Architecture
 
+```mermaid
+flowchart TD
+    User(["👤 User"])
+    CC["Claude Code"]
+    MCP["MCP Server\noptimize_prompt"]
+
+    User -->|raw prompt| CC
+    CC -->|"optimize_prompt()"| MCP
+
+    MCP --> T{"word count\n< 6?"}
+    T -->|yes| SK(["⚡ skip — return raw"])
+    T -->|no| GA
+
+    subgraph GA["① Gap Analysis\ngapAnalysis.js"]
+        GAM["Gemma 3n-E4B\nTogether AI"]
+        GAC{"clarity\n≥ 0.7?"}
+        GAM --> GAC
+    end
+
+    GAC -->|no| CQ(["❓ return clarification\nquestions"])
+    GAC -->|yes| EM
+
+    subgraph EM["② Embed & Cache\nembedAndCache.js"]
+        EMM["multilingual-e5-large\n1024-dim · Together AI"]
+        RDS["Upstash Redis\ncosine sim ≥ 0.9"]
+        EMM --> RDS
+    end
+
+    RDS -->|hit| CH(["✅ cached result"])
+    RDS -->|miss| RG
+
+    subgraph RG["③ RAG Retrieval\nragRetrieval.js"]
+        SB["Supabase pgvector\ntop-3 chunks @ 0.65"]
+    end
+
+    RG --> SY
+
+    subgraph SY["④ Synthesis\nsynthesis.js"]
+        SYM["Gemma 3n-E4B\n+ RAG context\n+ model hints"]
+        SYM --> EX["Extract optimized prompt\nfaithfulness score"]
+        EX --> WC["Write Redis cache\n24h TTL"]
+        EX --> LM["Log metrics\nSupabase"]
+    end
+
+    SY -->|optimizedPrompt| CC
+    CC -->|acts on optimized prompt| RP(["💬 Response"])
+```
+
+> Full component breakdown: [ARCHITECTURE.md](ARCHITECTURE.md)
+
 ### The Intelligence Stack
 * **Core Logic:** `google/gemma-3n-e4b-it` via Together AI (optimized for latency-to-logic efficiency)
 * **Vector Database:** Supabase (`pgvector`) storing 1024-dimension embeddings
 * **Embedding Model:** `intfloat/multilingual-e5-large-instruct` with `passage:`/`query:` instruction prefixes
-* **Semantic Cache:** Upstash Redis to reduce COGS and latency for redundant high-intent queries
-* **Transport:** MCP (Model Context Protocol) — runs as a local stdio server via `npx`
+* **Semantic Cache:** Upstash Redis — cosine similarity ≥ 0.9, 24h TTL
+* **Transport:** MCP (Model Context Protocol) — stdio server via `npx`
 
 ### Evaluator-Optimizer Loop
-1. **Ingestion** — RAG retrieval of best practices from the Knowledge Vault
-2. **Gap Analysis** — identifies missing context; asks clarification questions if clarity score < 0.7
-3. **Synthesis** — Gemma 3n generates the optimized prompt
-4. **Audit** — internal regression against a G-Eval rubric (Faithfulness, Specificity, Structure)
+1. **Triage** — short inputs (< 6 words) skip the pipeline entirely
+2. **Gap Analysis** — Gemma 3n scores clarity; asks follow-up questions if score < 0.7
+3. **Embed & Cache** — 1024-dim embedding; returns cached result on semantic hit
+4. **RAG Retrieval** — top-3 research chunks from Supabase pgvector
+5. **Synthesis** — Gemma 3n generates the optimized prompt grounded in retrieved research
+6. **Audit** — faithfulness score computed via RAG word overlap; metrics logged to Supabase
 
 ---
 
