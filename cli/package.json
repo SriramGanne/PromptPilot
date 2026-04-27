@@ -1,0 +1,19 @@
+{
+  "name": "promptpilot",
+  "version": "1.0.0",
+  "description": "CLI that intercepts and optimizes prompts before Claude sees them",
+  "type": "module",
+  "bin": {
+    "promptpilot": "./bin/promptpilot.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "@supabase/supabase-js": "^2.103.3",
+    "@upstash/redis": "^1.37.0",
+    "@upstash/ratelimit": "^2.0.8",
+    "openai": "^6.34.0",
+    "chalk": "^5.0.0",
+    "inquirer": "^9.0.0",
+    "commander": "^12.0.0"
+  }
+}
