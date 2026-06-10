@@ -48,10 +48,9 @@ export default async function VaultPage() {
         <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-6 py-4">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-3" aria-label="PromptPilot home">
+              {/* Wordmark already includes the "PromptPilot" text (see
+                  BrandMark) — no separate label, matching the Optimizer header. */}
               <BrandMark height={36} priority />
-              <span className="text-lg font-bold tracking-tight text-white">
-                PromptPilot
-              </span>
             </Link>
             <div className="hidden sm:block">
               <NavTabs />

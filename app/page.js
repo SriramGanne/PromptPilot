@@ -70,6 +70,12 @@ export default function Home() {
   const [thinkingContent, setThinkingContent] = useState("");
   const [optimizedPrompt, setOptimizedPrompt] = useState("");
 
+  // Eval Layer V1 is non-streaming: instead of token deltas, the server emits
+  // coarse `stage` events. This holds the current human-readable stage label
+  // (e.g. "Evaluating optimization quality…") shown while we await the final
+  // prompt. Empty string = no active stage.
+  const [loadingStage, setLoadingStage] = useState("");
+
   // React 19: async callbacks inside startTransition keep the UI responsive
   // without needing a manual isLoading flag.
   const [isPending, startTransition] = useTransition();
@@ -154,6 +160,7 @@ export default function Home() {
                      //                   doesn't flash while we await clarifying
     setThinkingContent("");
     setOptimizedPrompt("");
+    setLoadingStage("");
     setCopied(false);
     setJustCompleted(false);
     didAutoScrollRef.current = false; // re-arm auto-scroll for this run
@@ -190,12 +197,9 @@ export default function Home() {
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let streamedPrompt = "";
-    let metaPayload = null;
 
-    // Updates the split output states from the running raw buffer. Called
-    // on every streamed token AND on the final `done`/`cached` events to
-    // guarantee the UI converges on the complete parse.
+    // Updates the split output states from a raw structured-output buffer.
+    // Called on the final `done`/`cached` events to render the parsed prompt.
     const syncSplitStates = (raw) => {
       const p = parseStructuredOutput(raw);
       setThinkingContent(p.thinking);
@@ -208,6 +212,7 @@ export default function Home() {
           setResult(null);
           setThinkingContent("");
           setOptimizedPrompt("");
+          setLoadingStage("");
           setQuestions(ev.questions ?? []);
           setAnswers(new Array(ev.questions?.length ?? 0).fill(""));
           setClarityScore(ev.clarityScore ?? null);
@@ -218,6 +223,15 @@ export default function Home() {
           setResult(ev);
           syncSplitStates(ev.optimizedPrompt ?? "");
           setClarityScore(ev.clarityScore ?? null);
+          setLoadingStage("");
+          setStep(3);
+          break;
+        case "stage":
+          // Non-streaming progress. Move to step 3 and ensure a result object
+          // exists so the result panel renders its loading state — even before
+          // the `meta` event populates RAG sources.
+          setLoadingStage(ev.label ?? "");
+          setResult((prev) => prev ?? { streaming: true, ragSources: [] });
           setStep(3);
           break;
         case "meta":
@@ -226,21 +240,16 @@ export default function Home() {
           setClarityScore(ev.clarityScore ?? null);
           setStep(3);
           break;
-        case "token":
-          streamedPrompt += ev.content;
-          setResult((prev) => ({
-            ...(prev ?? metaPayload ?? {}),
-            optimizedPrompt: streamedPrompt,
-            streaming: true,
-          }));
-          syncSplitStates(streamedPrompt);
-          break;
         case "done":
+          // The server already selected the final prompt (V1 or refined V2);
+          // `optimizedPrompt` carries it for the structured-output parser.
           setResult({ ...ev, streaming: false });
-          syncSplitStates(ev.optimizedPrompt ?? "");
+          syncSplitStates(ev.optimizedPrompt ?? ev.finalPrompt ?? "");
+          setLoadingStage("");
           break;
         case "error":
           setError(ev.error || "Stream error");
+          setLoadingStage("");
           break;
       }
     };
@@ -323,6 +332,7 @@ export default function Home() {
     setResult(null);
     setThinkingContent("");
     setOptimizedPrompt("");
+    setLoadingStage("");
     setError("");
     setClarityScore(null);
     setClarifyRound(0);
@@ -385,7 +395,10 @@ export default function Home() {
 
           <div className="mt-8 rounded-2xl border border-border bg-surface/80 backdrop-blur-sm shadow-[0_20px_60px_-20px_rgba(0,0,0,0.6)]">
             {error && (
-              <div className="mx-6 mt-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger">
+              <div
+                role="alert"
+                className="mx-6 mt-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
+              >
                 {error}
               </div>
             )}
@@ -422,6 +435,7 @@ export default function Home() {
                 justCompleted={justCompleted}
                 thinkingContent={thinkingContent}
                 optimizedPrompt={optimizedPrompt}
+                loadingStage={loadingStage}
                 parsed={parsed}
                 result={result}
                 targetModel={targetModel}
@@ -458,11 +472,11 @@ function Header({ powerMode, setPowerMode, isRefining }) {
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-3" aria-label="PromptPilot home">
             {/* Logo pulses softly whenever an agentic run is active, so
-                even the navbar signals that work is in flight. */}
+                even the navbar signals that work is in flight. The wordmark
+                already contains the "PromptPilot" text — see BrandMark — so we
+                must NOT add a separate text label here (avoids "PromptPilot
+                PromptPilot" and frees header width on mobile). */}
             <BrandMark height={36} loading={isRefining} priority />
-            <span className="text-lg font-bold tracking-tight text-white">
-              PromptPilot
-            </span>
           </Link>
           <div className="hidden sm:block">
             <NavTabs />
@@ -541,7 +555,7 @@ function Stepper({ currentStep }) {
               {state === "done" ? "✓" : s.id}
             </div>
             <span
-              className={`truncate text-[13px] font-medium tracking-wide ${
+              className={`min-w-0 truncate text-[13px] font-medium tracking-wide ${
                 state === "upcoming" ? "text-text-dim" : "text-text"
               }`}
             >
@@ -734,6 +748,7 @@ function StepResult({
   justCompleted,
   thinkingContent,
   optimizedPrompt,
+  loadingStage,
   parsed,
   result,
   targetModel,
@@ -743,17 +758,15 @@ function StepResult({
   powerMode,
 }) {
   const streaming = result?.streaming;
-  // Thinking has arrived (or is arriving) if either thinkingContent or any
-  // other reasoning region has non-empty text. Keeps the box hidden until
-  // there's something to show, so it doesn't flash empty during the meta event.
+  // Thinking has arrived if either thinkingContent or any other reasoning
+  // region has non-empty text. Reasoning is parsed only once the final prompt
+  // lands (Eval Layer V1 is non-streaming), so we gate purely on content.
   const hasReasoning =
     Boolean(thinkingContent) || Boolean(parsed.grounding) || Boolean(parsed.evalPrediction);
 
-  // Streaming phase: while we're still inside <thinking>, optimizedPrompt is
-  // empty. Show the streaming cursor in the reasoning box. Once ### PROMPT
-  // START arrives, optimizedPrompt starts filling and the cursor moves there.
-  const cursorInReasoning = streaming && !optimizedPrompt;
-  const cursorInPrompt = streaming && Boolean(optimizedPrompt);
+  // Loading phase: the server is buffering V1 → judge → optional refinement.
+  // No prompt is shown until `done`; we render a staged skeleton meanwhile.
+  const loading = streaming && !optimizedPrompt;
 
   return (
     <div className="p-6 sm:p-8">
@@ -789,12 +802,12 @@ function StepResult({
       {/* Reasoning — Power Mode only, collapsed by default via <details>.
           Browser-native progressive disclosure: no JS state, no layout glue.
           The summary acts as the toggle button; chevron rotates on open. */}
-      {powerMode && (hasReasoning || cursorInReasoning) && (
+      {powerMode && hasReasoning && (
         <ReasoningDisclosure
           thinking={thinkingContent}
           grounding={parsed.grounding}
           evalPrediction={parsed.evalPrediction}
-          showCursor={cursorInReasoning}
+          showCursor={false}
         />
       )}
 
@@ -819,18 +832,15 @@ function StepResult({
             </svg>
             <span>Improved Prompt</span>
           </div>
-          {/* When Power Mode is off, the Reasoning disclosure is hidden —
-              so there's nothing visible during the <thinking> phase before
-              ### PROMPT START. Show a shimmer skeleton + status line so the
-              user has feedback that work is happening. */}
-          {!powerMode && streaming && !optimizedPrompt ? (
-            <GeneratingSkeleton />
+          {/* Eval Layer V1 is non-streaming: nothing is shown until the final
+              prompt lands. While the orchestration runs (optimize → evaluate →
+              refine) we show a shimmer skeleton driven by the server's current
+              stage label, in BOTH Power Mode and standard mode. */}
+          {loading ? (
+            <GeneratingSkeleton label={loadingStage} />
           ) : (
             <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-text">
               {optimizedPrompt}
-              {cursorInPrompt && (
-                <span className="ml-0.5 inline-block h-3.5 w-[2px] translate-y-0.5 animate-pulse bg-accent-2 align-baseline" />
-              )}
               {!optimizedPrompt && !streaming && (
                 <span className="text-text-dim italic">No prompt returned.</span>
               )}
@@ -917,7 +927,8 @@ function ReasoningDisclosure({ thinking, grounding, evalPrediction, showCursor }
 // staggered opacity via per-bar delay for a wave effect.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function GeneratingSkeleton() {
+function GeneratingSkeleton({ label = "" }) {
+  // Fallback cycle for paths that don't drive an explicit stage label.
   const PHASES = [
     "Analysing intent…",
     "Retrieving research…",
@@ -926,9 +937,26 @@ function GeneratingSkeleton() {
   ];
   const [phase, setPhase] = useState(0);
   useEffect(() => {
+    // When the server is driving the label, don't run the local cycle.
+    if (label) return;
     const id = setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 1400);
     return () => clearInterval(id);
+  }, [label]);
+
+  // Elapsed-time tracker → reassurance affordance. Slow runs (judge + refine
+  // can push past 30s) otherwise look stalled; after a threshold we swap the
+  // caption to an explicit "still working" message so the wait reads as
+  // intentional, not hung.
+  const SLOW_AFTER_SEC = 30;
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(id);
   }, []);
+  const takingLong = elapsed >= SLOW_AFTER_SEC;
+
+  // Server-driven stage label takes precedence over the local fallback cycle.
+  const statusText = label || PHASES[phase];
 
   // Bar widths are deliberately irregular so the block reads as prose-like
   // text rather than a table. All bars use `animate-pulse`; staggered
@@ -945,8 +973,8 @@ function GeneratingSkeleton() {
           className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border-2 border-accent-2/30 border-t-accent-2 animate-spin"
           aria-hidden="true"
         />
-        <span key={phase} className="animate-[fadeIn_260ms_ease-out]">
-          {PHASES[phase]}
+        <span key={statusText} className="animate-[fadeIn_260ms_ease-out]">
+          {statusText}
         </span>
       </div>
 
@@ -960,8 +988,14 @@ function GeneratingSkeleton() {
         ))}
       </div>
 
-      <p className="mt-4 text-[11px] italic text-text-dim">
-        Grounding your prompt in 12+ research papers — this usually takes 8–12 seconds.
+      <p
+        className={`mt-4 text-[11px] italic transition-colors ${
+          takingLong ? "text-accent-2 not-italic" : "text-text-dim"
+        }`}
+      >
+        {takingLong
+          ? "Still working — quality checks are taking a little longer than usual. Hang tight, your prompt is on its way."
+          : "Grounding, evaluating, and refining your prompt — this can take up to a minute."}
       </p>
     </div>
   );
@@ -1104,8 +1138,11 @@ function ReasoningBlock({ label, body }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function CacheStatusCard({ result }) {
+  // While the pipeline is running, `result.streaming` is true but the cache
+  // outcome isn't known yet — don't flash "Miss" prematurely.
+  const working = result?.streaming === true;
   const hit = result?.cacheHit === true;
-  const miss = result && !hit;
+  const miss = Boolean(result) && !hit && !working;
   const idle = !result;
   return (
     <div className="rounded-2xl border border-border bg-surface/80 p-5 backdrop-blur-sm">
@@ -1122,12 +1159,13 @@ function CacheStatusCard({ result }) {
               : "bg-border-2/40 text-text-dim"
           }`}
         >
-          {idle ? "Idle" : hit ? "Hit" : "Miss"}
+          {working ? "···" : idle ? "Idle" : hit ? "Hit" : "Miss"}
         </div>
       </div>
 
       <div className="mt-3 text-[13px] text-text-muted">
-        {idle && "Awaiting first query…"}
+        {working && "Checking cache & synthesising…"}
+        {!working && idle && "Awaiting first query…"}
         {miss && "Fresh synthesis. Cached for 24 h for similar prompts."}
         {hit && (
           <>
@@ -1144,11 +1182,18 @@ function CacheStatusCard({ result }) {
 }
 
 function QualityDashboard({ result }) {
-  // Ragas-style derived metrics:
-  //   • faithfulness — from the API (answer grounded in retrieved context)
-  //   • relevancy    — mean cosine similarity of the RAG sources (context ↔ query)
-  const faithfulness = result?.faithfulnessScore;
-  const relevancy = useMemo(() => {
+  // Prefer the GPT-5-mini judge scores (evaluationResult) when present. The
+  // judge scores faithfulness/relevancy on 0–10 and overall on 0–100; we
+  // normalise to 0–1 for the bars. When the judge was disabled or failed, fall
+  // back to the legacy lexical faithfulness + mean-cosine relevancy so the
+  // dashboard still renders something meaningful (and stays back-compatible
+  // with cached payloads generated before the eval layer).
+  const evalResult =
+    result?.evaluationResult && result.evaluationResult.evaluation_failed === false
+      ? result.evaluationResult
+      : null;
+
+  const cosineRelevancy = useMemo(() => {
     if (!result?.ragSources?.length) return null;
     return (
       result.ragSources.reduce((s, src) => s + (src.similarity ?? 0), 0) /
@@ -1156,8 +1201,14 @@ function QualityDashboard({ result }) {
     );
   }, [result]);
 
-  const overall =
-    faithfulness != null && relevancy != null ? (faithfulness + relevancy) / 2 : null;
+  const judged = Boolean(evalResult);
+  const faithfulness = judged ? evalResult.faithfulness_score / 10 : result?.faithfulnessScore;
+  const relevancy = judged ? evalResult.context_relevancy_score / 10 : cosineRelevancy;
+  const overall = judged
+    ? evalResult.overall_score / 100
+    : faithfulness != null && relevancy != null
+      ? (faithfulness + relevancy) / 2
+      : null;
 
   return (
     <div className="rounded-2xl border border-border bg-surface/80 p-5 backdrop-blur-sm">
@@ -1165,18 +1216,38 @@ function QualityDashboard({ result }) {
         <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-text-dim">
           Quality Dashboard
         </div>
-        <div className="text-[11px] font-medium text-text-dim">Ragas</div>
+        <div className="text-[11px] font-medium text-text-dim">
+          {judged ? "GPT-5-mini judge" : "Ragas"}
+        </div>
       </div>
 
       <div className="mt-4 space-y-3">
-        <ScoreBar label="Faithfulness" value={faithfulness} />
-        <ScoreBar label="Relevancy"    value={relevancy} />
+        <ScoreBar label={judged ? "Intent Fidelity" : "Faithfulness"} value={faithfulness} />
+        <ScoreBar label={judged ? "Technique Use" : "Relevancy"}    value={relevancy} />
         <div className="mt-3 flex items-center justify-between rounded-lg border border-border-2/60 bg-surface-2/60 px-3 py-2.5">
           <span className="text-[12px] font-semibold text-text-muted">Overall</span>
           <span className="font-mono text-[16px] font-semibold text-accent-2">
             {overall != null ? (overall * 100).toFixed(0) + "%" : "—"}
           </span>
         </div>
+
+        {/* Refinement status — only meaningful once the judge has run. */}
+        {result?.refinementTriggered && (
+          <div className="flex items-center justify-between rounded-lg border border-border-2/60 bg-surface-2/40 px-3 py-2 text-[12px]">
+            <span className="font-medium text-text-muted">Refinement</span>
+            <span className={result.refinementSuccessful ? "text-success" : "text-text-dim"}>
+              {result.refinementSuccessful ? "✓ Applied (V2)" : "Fell back to V1"}
+            </span>
+          </div>
+        )}
+
+        {/* One-line evaluator insight, when the judge supplied one. */}
+        {judged && evalResult.evaluator_insight && (
+          <p className="pt-1 text-[12px] leading-relaxed text-text-muted">
+            <span className="font-semibold text-text-dim">Insight: </span>
+            {evalResult.evaluator_insight}
+          </p>
+        )}
       </div>
     </div>
   );

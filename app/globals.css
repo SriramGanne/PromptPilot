@@ -12,7 +12,10 @@
   --color-border-2:     #2e2e3d;
   --color-text:         #f1f1f4;
   --color-text-muted:   #8a8aa0;
-  --color-text-dim:     #5a5a70;
+  /* Lifted from #5a5a70 for legibility: dim captions, placeholders, and the
+     "Skip & Generate" action were below comfortable contrast on the near-black
+     bg. Still clearly dimmer than --color-text-muted, so hierarchy is intact. */
+  --color-text-dim:     #74748c;
   --color-accent:       #7c3aed;
   --color-accent-2:     #a855f7;
   --color-accent-soft:  rgba(124, 58, 237, 0.15);
@@ -42,6 +45,30 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  /* Themes native controls (the <select> dropdown list, form widgets, default
+     scrollbars on non-WebKit) to dark, so they stop flashing light-on-dark. */
+  color-scheme: dark;
+}
+
+/* Accessible keyboard focus — one consistent neon-accent ring across every
+   interactive element. Scoped to :focus-visible so it only shows for keyboard
+   users, never on mouse click. Textareas/inputs keep their own focus ring. */
+:where(a, button, select, summary, [role="switch"]):focus-visible {
+  outline: 2px solid var(--color-accent-2);
+  outline-offset: 2px;
+}
+
+/* Respect users who prefer reduced motion: collapse the pulses, shimmers,
+   spins, and fades to near-instant instead of removing feedback entirely. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Ambient gradient glow behind the page */

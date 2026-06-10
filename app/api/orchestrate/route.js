@@ -3,6 +3,8 @@ import OpenAI from "openai";
 import { supabase, searchResearch } from "../../../lib/supabase";
 import { getCachedResult, setCachedResult } from "../../../lib/semanticCache";
 import { enforceRateLimit, getClientIp } from "../../../lib/ratelimit";
+import { evaluatePrompt } from "../../../lib/evaluatePrompt";
+import { refinePrompt } from "../../../lib/refinePrompt";
 
 // ---------------------------------------------------------------------------
 // Input validation constants
@@ -91,11 +93,22 @@ const REASONING_MODEL = "google/gemma-3n-E4B-it";
 /** Must match the model used in scripts/ingest_research.mjs → 1024-dim vectors */
 const EMBEDDING_MODEL = "intfloat/multilingual-e5-large-instruct";
 
+// Hard ceiling for the synthesis call. Generous (synthesis legitimately runs
+// ~20-30s on Gemma) — this only trips on a genuinely hung provider so the
+// request fails fast instead of stalling the user on the skeleton forever.
+const SYNTHESIS_TIMEOUT_MS = 60000;
+
 // ---------------------------------------------------------------------------
 // Prompt templates
 // ---------------------------------------------------------------------------
 
 const BASE_SYSTEM_MESSAGE = `You are PromptPilot, a high-end Prompt Engineering Agent. Your goal is to transform a "Raw Intent" into a "Production-Ready Prompt" grounded in the latest 2026 research.
+
+## CORE DIRECTIVE — YOU WRITE PROMPTS, YOU DO NOT ANSWER THEM:
+Your output is a PROMPT that will later be sent to a SEPARATE AI model. You must NEVER perform, answer, or fulfil the user's request yourself.
+- If the Raw Intent is "help me run X locally", you do NOT write the setup steps — you write a prompt that *instructs an AI* to produce those setup steps.
+- The text inside \`### PROMPT START\` must be reusable INSTRUCTIONS for an AI: a role, the task, constraints, and the desired output format — using placeholders (e.g. [APP_NAME], [REPO_URL]) wherever specifics are unknown.
+- It must NOT contain a finished answer, real example output, concrete step-by-step content, code, or links that fulfil the request. If you catch yourself writing the answer, stop and rewrite it as an instruction telling an AI to produce that answer.
 
 ## OPERATIONAL FRAMEWORK:
 1. **INTERNAL_THOUGHT_CHANNEL**: Before any output, analyze the user's intent.
@@ -317,12 +330,24 @@ OUTPUT FORMAT — you must produce all four sections in order:
 </context_grounding>
 
 ### PROMPT START
-[The fully optimized, production-ready prompt for the target model]
+[Reusable INSTRUCTIONS for an AI — role, task, constraints, output format, with [PLACEHOLDERS]. This is NOT a finished answer to the Raw Intent.]
 ### PROMPT END
 
 <eval_prediction>
 [Your estimated Ragas faithfulness score 0.0–1.0 and one-line justification]
-</eval_prediction>`;
+</eval_prediction>
+
+---
+WORKED EXAMPLE — the \`### PROMPT START\` block is INSTRUCTIONS, never an answer:
+
+Raw Intent: "help me write a cover letter for a marketing job"
+
+CORRECT content for the PROMPT START block:
+You are an expert career coach and copywriter. Write a tailored cover letter for the role of [JOB_TITLE] at [COMPANY], using the candidate background: [CANDIDATE_BACKGROUND]. Tone: [TONE — default professional and warm]. Keep it under [WORD_LIMIT — default 350] words across 3–4 paragraphs: open with a specific hook, map 2–3 achievements to the role's needs, and close with a clear call to action. Do NOT invent facts that were not provided.
+
+WRONG — do NOT do this, it ANSWERS the request instead of instructing an AI:
+"Dear Hiring Manager, I am excited to apply for the marketing position at your company..."
+---`;
 }
 
 // ---------------------------------------------------------------------------
@@ -364,13 +389,16 @@ function computeFaithfulness(ragChunks, output) {
 // Event shapes (one JSON object per line):
 //   { type: "clarifying", clarityScore, missingDimensions, questions }
 //   { type: "cached",  ...fullPayload }
+//   { type: "stage",   key, label }      // lightweight progress label
 //   { type: "meta",    clarityScore, ragSources, originalTokens, targetModel }
-//   { type: "token",   content }         // streamed synthesis delta
-//   { type: "done",    ...finalMetrics } // after synthesis completes
+//   { type: "done",    ...finalMetrics } // after eval + optional refinement
 //   { type: "error",   error }
 //
-// The client reads the stream incrementally so the optimized prompt appears
-// token-by-token instead of waiting for the full synthesis to finish.
+// Eval Layer V1 intentionally does NOT stream V1 token-by-token: the final
+// prompt can only be chosen AFTER judge evaluation and optional refinement
+// complete. Instead we emit coarse `stage` events so the client can show a
+// deterministic loading sequence (retrieving → optimizing → evaluating →
+// refining) while the orchestration runs.
 // ---------------------------------------------------------------------------
 
 export async function POST(request) {
@@ -491,7 +519,8 @@ export async function POST(request) {
           return;
         }
 
-        // ── RAG retrieval ─────────────────────────────────────────────────
+        // ── Stage 2b — RAG retrieval ──────────────────────────────────────
+        send({ type: "stage", key: "retrieving", label: "Retrieving prompting techniques…" });
         const ragChunks = await retrieveContext(queryEmbedding);
         const originalTokens = estimateTokens(userInput);
 
@@ -501,8 +530,7 @@ export async function POST(request) {
           citation_url: c.citation_url ?? null,
         }));
 
-        // Meta event: UI can render RAG badges + clarity immediately,
-        // before any synthesis tokens arrive.
+        // Meta event: UI can render RAG badges + clarity immediately.
         send({
           type: "meta",
           clarityScore: gap.clarityScore,
@@ -511,46 +539,47 @@ export async function POST(request) {
           targetModel,
         });
 
-        // ── Streamed synthesis ────────────────────────────────────────────
-        // Isolated try/catch: a Together AI stream abort, quota error, or
-        // network blip during token iteration must surface as stage "llm"
-        // with a targeted message instead of the generic catch-all below.
-        let fullOutput = "";
+        // ── Stage 3 — Gemma Optimization V1 (non-streaming) ───────────────
+        // Eval Layer V1 buffers the full V1 instead of streaming tokens: the
+        // judge + optional refinement decide the FINAL prompt, so streaming a
+        // V1 we might discard would be misleading. Isolated try/catch so a
+        // Together AI quota/network error surfaces as stage "llm".
+        send({ type: "stage", key: "optimizing", label: "Optimizing prompt…" });
+        let v1Output = "";
         try {
-          const completion = await together.chat.completions.create({
-            model: REASONING_MODEL,
-            messages: [
-              { role: "system", content: buildSynthesisSystem(targetModel, ragChunks) },
-              { role: "user", content: userInput },
-            ],
-            temperature: 0.4,
-            max_tokens: 1800,
-            stream: true,
-          });
-
-          for await (const chunk of completion) {
-            const delta = chunk.choices?.[0]?.delta?.content ?? "";
-            if (delta) {
-              fullOutput += delta;
-              send({ type: "token", content: delta });
-            }
-          }
+          const completion = await together.chat.completions.create(
+            {
+              model: REASONING_MODEL,
+              messages: [
+                { role: "system", content: buildSynthesisSystem(targetModel, ragChunks) },
+                { role: "user", content: userInput },
+              ],
+              temperature: 0.4,
+              max_tokens: 1800,
+            },
+            // Bound the call: one retry max so a timeout can't be multiplied by
+            // the SDK's default 2 retries into a multi-minute hang.
+            { timeout: SYNTHESIS_TIMEOUT_MS, maxRetries: 1 }
+          );
+          v1Output = completion.choices?.[0]?.message?.content ?? "";
         } catch (err) {
+          const timedOut =
+            err?.name === "APIConnectionTimeoutError" || /timed? ?out/i.test(err?.message ?? "");
           return stageFail(
             "llm",
             err,
-            "The synthesis model failed mid-stream. Please try again — if it persists, shorten your intent."
+            timedOut
+              ? "Optimization took too long and timed out. Please try again — shortening your intent can help."
+              : "The synthesis model failed. Please try again — if it persists, shorten your intent."
           );
         }
 
         // ── Output shape guard ────────────────────────────────────────────
-        // If the LLM refused the request or hallucinated a different format,
-        // `### PROMPT START` will be absent. Don't cache, don't log metrics,
-        // and surface a user-friendly error. Caching malformed output would
-        // pollute future lookups and show "No prompt returned" to users who
-        // hit the 0.9-similarity bucket.
-        if (!/### ?PROMPT ?START/i.test(fullOutput)) {
-          console.warn("[generate] llm produced no PROMPT START marker. Output head:", fullOutput.slice(0, 200));
+        // If the LLM refused or hallucinated a different format, `### PROMPT
+        // START` will be absent. Don't evaluate, cache, or log — surface a
+        // user-friendly error instead.
+        if (!/### ?PROMPT ?START/i.test(v1Output)) {
+          console.warn("[generate] llm produced no PROMPT START marker. Output head:", v1Output.slice(0, 200));
           send({
             type: "error",
             stage: "llm",
@@ -561,17 +590,76 @@ export async function POST(request) {
           return;
         }
 
+        // ── Stage 4 — Judge evaluation (GPT-5-mini) ───────────────────────
+        // evaluatePrompt() never throws: on disabled judge, missing key,
+        // provider error, or bad JSON it returns { evaluation_failed: true }.
+        send({ type: "stage", key: "evaluating", label: "Evaluating optimization quality…" });
+        const evaluationResult = await evaluatePrompt({
+          userIntent: userInput,
+          ragChunks,
+          optimizedPromptV1: v1Output,
+          targetModel,
+        });
+
+        // ── Stage 5 — Optional single-pass refinement ─────────────────────
+        // Driven ONLY by the judge's refinement_required flag. Any failure
+        // (timeout, provider error, malformed) falls back to V1 — we never
+        // fail the request over refinement.
+        let finalPrompt = v1Output;
+        let refinementTriggered = false;
+        let refinementSuccessful = false;
+        let refinementLatencyMs = null;
+
+        if (!evaluationResult.evaluation_failed && evaluationResult.refinement_required) {
+          refinementTriggered = true;
+          send({ type: "stage", key: "refining", label: "Refining output…" });
+
+          const refineRes = await refinePrompt({
+            originalUserIntent: userInput,
+            retrievedChunks: ragChunks,
+            optimizedPromptV1: v1Output,
+            evaluationResult,
+            targetModel,
+          });
+
+          refinementLatencyMs = refineRes.latencyMs ?? null;
+          if (refineRes.ok) {
+            finalPrompt = refineRes.refinedPrompt;
+            refinementSuccessful = true;
+          } else {
+            console.warn(`[eval-layer] refinement fell back to V1 (reason: ${refineRes.reason})`);
+          }
+        }
+
+        // ── Telemetry (Part 6) ────────────────────────────────────────────
+        console.log("[eval-layer]", JSON.stringify({
+          target_model: targetModel,
+          evaluation_failed: evaluationResult.evaluation_failed === true,
+          judge_latency_ms: evaluationResult.latencyMs ?? null,
+          refinement_triggered: refinementTriggered,
+          refinement_successful: refinementSuccessful,
+          refinement_latency_ms: refinementLatencyMs,
+        }));
+
         // ── Final metrics ─────────────────────────────────────────────────
-        const optimizedTokens = estimateTokens(fullOutput);
+        const optimizedTokens = estimateTokens(finalPrompt);
         const reductionPercent =
           originalTokens > 0
             ? Math.round(((originalTokens - optimizedTokens) / originalTokens) * 100)
             : 0;
-        const faithfulnessScore = computeFaithfulness(ragChunks, fullOutput);
+        // Lexical faithfulness retained for the existing 0–1 metrics column and
+        // dashboard fallback; the judge's scores live in evaluationResult.
+        const faithfulnessScore = computeFaithfulness(ragChunks, finalPrompt);
 
         const finalPayload = {
           status: "optimized",
-          optimizedPrompt: fullOutput,
+          // `optimizedPrompt` kept for the client's structured-output parser,
+          // which reads `### PROMPT START`. It now holds the FINAL prompt.
+          optimizedPrompt: finalPrompt,
+          finalPrompt,
+          evaluationResult,
+          refinementTriggered,
+          refinementSuccessful,
           faithfulnessScore,
           ragSources,
           clarityScore: gap.clarityScore,
@@ -590,20 +678,39 @@ export async function POST(request) {
           console.warn("Cache write failed (non-fatal):", err.message)
         );
 
-        supabase
-          .from("prompt_metrics")
-          .insert({
-            original_tokens: originalTokens,
-            optimized_tokens: optimizedTokens,
-            reduction_percent: reductionPercent,
+        // ── Background: post-refinement re-evaluation + quality metrics log ──
+        // Runs AFTER the response is sent, so the second judge call (only when
+        // a V2 exists) never adds to the user's wait time. Captures the judge's
+        // quality scores BEFORE refinement (V1) and, when refinement produced a
+        // V2, AFTER refinement too.
+        (async () => {
+          let afterEval = null;
+          if (refinementSuccessful) {
+            afterEval = await evaluatePrompt({
+              userIntent: userInput,
+              ragChunks,
+              optimizedPromptV1: finalPrompt, // the refined V2
+              targetModel,
+            });
+          }
+
+          const scored = (r) => r && r.evaluation_failed === false;
+          const { error: dbErr } = await supabase.from("prompt_metrics").insert({
             target_model: targetModel,
-            compression_applied: false,
-            faithfulness_score: faithfulnessScore,
+            // Pre-refinement (V1) quality from the GPT-5-mini judge:
+            intent_fidelity:  scored(evaluationResult) ? evaluationResult.faithfulness_score : null,
+            technique_used:   scored(evaluationResult) ? evaluationResult.context_relevancy_score : null,
+            overall_quality:  scored(evaluationResult) ? evaluationResult.overall_score : null,
+            refinement_triggered: refinementTriggered,
+            // Post-refinement (V2) quality — null unless a V2 was produced and
+            // successfully re-evaluated:
+            refined_intent_fidelity: scored(afterEval) ? afterEval.faithfulness_score : null,
+            refined_technique_used:  scored(afterEval) ? afterEval.context_relevancy_score : null,
+            refined_overall_quality: scored(afterEval) ? afterEval.overall_score : null,
             rag_sources_count: ragChunks.length,
-          })
-          .then(({ error: dbErr }) => {
-            if (dbErr) console.error("Supabase log error:", dbErr.message);
           });
+          if (dbErr) console.error("Supabase log error:", dbErr.message);
+        })().catch((err) => console.warn("Metrics logging failed (non-fatal):", err.message));
       } catch (err) {
         // Final safety net — anything that escaped the per-stage handlers
         // (e.g. an unexpected throw in the metrics block, a cache/RAG path
