@@ -1,0 +1,122 @@
+[
+  {
+    "title": "Self-Refine (Iterative Self-Feedback)",
+    "content": "Self-Refine has a single model improve its own output through an iterative generate → critique → revise loop, with no extra training, reward model, or human labels. The model produces a draft, then is prompted to give specific, actionable feedback on that draft, then rewrites it using the feedback; the loop repeats until a stopping condition. The key prompting move is separating the 'feedback' turn from the 'refine' turn so the critique is explicit and the revision is grounded in it. Reported ~20% average gains across tasks like code optimization, dialogue, and sentiment rewriting.",
+    "summary": "Iteratively improves an answer by having the same model critique then rewrite its own output.",
+    "best_for": "Polishing drafts, code, and writing where a second self-review pass adds quality.",
+    "category": "Reasoning",
+    "citation_url": "https://arxiv.org/abs/2303.17651",
+    "authors": ["Aman Madaan", "Niket Tandon", "Prakhar Gupta", "et al."],
+    "publishedDate": "2023-03-30",
+    "is_featured": false,
+    "scores": { "research_quality": 8, "practical_value": 9, "prompt_optimization_relevance": 9, "evaluation_relevance": 6 }
+  },
+  {
+    "title": "Reflexion (Verbal Reinforcement)",
+    "content": "Reflexion turns task feedback into natural-language self-reflections that an agent stores in an episodic memory and consults on its next attempt — reinforcement without updating any weights. After a failed trajectory, the agent verbally analyses what went wrong ('I assumed X but the tool returned Y'), writes a short lesson, and prepends those lessons to subsequent attempts. It is most powerful in multi-trial agentic settings (decision-making, coding, tool use) where retries are cheap, achieving strong gains on code-generation benchmarks.",
+    "summary": "Agents learn across attempts by writing verbal self-reflections into memory instead of fine-tuning.",
+    "best_for": "Iterative agent loops and retry-friendly tasks like code generation and tool use.",
+    "category": "Agentic",
+    "citation_url": "https://arxiv.org/abs/2303.11366",
+    "authors": ["Noah Shinn", "Federico Cassano", "Edward Berman", "et al."],
+    "publishedDate": "2023-03-20",
+    "is_featured": false,
+    "scores": { "research_quality": 8, "practical_value": 7, "prompt_optimization_relevance": 9, "evaluation_relevance": 6 }
+  },
+  {
+    "title": "Chain-of-Verification (CoVe)",
+    "content": "Chain-of-Verification reduces hallucination with a four-step prompt structure: (1) draft an initial response, (2) plan independent verification questions that fact-check the draft, (3) answer each question in isolation so the answers are not biased by the draft, and (4) regenerate a final, verified response that incorporates the corrections. The crucial detail is answering verification questions independently — batching them with the draft lets the model rationalise its own errors. Demonstrated fewer hallucinations on list questions, closed-book QA, and long-form generation.",
+    "summary": "Cuts hallucinations by drafting, then independently fact-checking via planned verification questions.",
+    "best_for": "Factual answers, list/entity questions, and long-form content where accuracy matters.",
+    "category": "Accuracy",
+    "citation_url": "https://arxiv.org/abs/2309.11495",
+    "authors": ["Shehzaad Dhuliawala", "Mojtaba Komeili", "Jing Xu", "et al."],
+    "publishedDate": "2023-09-20",
+    "is_featured": false,
+    "scores": { "research_quality": 8, "practical_value": 8, "prompt_optimization_relevance": 8, "evaluation_relevance": 7 }
+  },
+  {
+    "title": "Step-Back Prompting",
+    "content": "Step-Back Prompting first asks the model to abstract away from the specific question to a higher-level concept or first principle, then reasons from that principle back to the concrete answer. For a physics problem it might first elicit the governing law, then apply it; for a knowledge query it derives the general question whose answer constrains the specific one. This two-stage 'abstract, then solve' structure measurably improves reasoning-heavy STEM, knowledge-QA, and multi-hop tasks by reducing reasoning missteps.",
+    "summary": "Improves reasoning by abstracting to a high-level principle before solving the specific problem.",
+    "best_for": "STEM, knowledge-QA, and multi-hop questions that benefit from first principles.",
+    "category": "Reasoning",
+    "citation_url": "https://arxiv.org/abs/2310.06117",
+    "authors": ["Huaixiu Steven Zheng", "Swaroop Mishra", "Xinyun Chen", "et al."],
+    "publishedDate": "2023-10-09",
+    "is_featured": false,
+    "scores": { "research_quality": 8, "practical_value": 8, "prompt_optimization_relevance": 9, "evaluation_relevance": 5 }
+  },
+  {
+    "title": "Plan-and-Solve Prompting",
+    "content": "Plan-and-Solve is a zero-shot upgrade to 'Let's think step by step' that first instructs the model to devise a plan splitting the task into ordered subtasks, then to carry out the subtasks according to that plan. Adding an explicit 'extract relevant variables and their values' instruction further curbs calculation and missing-step errors. It recovers much of the benefit of hand-crafted few-shot CoT exemplars without needing any examples, making it a strong default when you have no demonstrations to provide.",
+    "summary": "Zero-shot reasoning that plans subtasks first, then executes them — fewer missing-step errors than plain CoT.",
+    "best_for": "Zero-shot multi-step problems where you have no few-shot examples to supply.",
+    "category": "Reasoning",
+    "citation_url": "https://arxiv.org/abs/2305.04091",
+    "authors": ["Lei Wang", "Wanyu Xu", "Yihuai Lan", "et al."],
+    "publishedDate": "2023-05-06",
+    "is_featured": false,
+    "scores": { "research_quality": 7, "practical_value": 8, "prompt_optimization_relevance": 9, "evaluation_relevance": 5 }
+  },
+  {
+    "title": "OPRO (Optimization by Prompting)",
+    "content": "OPRO uses an LLM as an optimizer: the optimization problem is described in natural language, and at each step the model is shown previously tried solutions paired with their scores and asked to propose better ones. Applied to prompt optimization, it iteratively searches for the instruction that maximises task accuracy — famously discovering the meta-instruction 'Take a deep breath and work on this problem step by step.' Optimized prompts beat human-written ones by up to 8% on GSM8K and up to 50% on Big-Bench Hard.",
+    "summary": "Treats an LLM as an optimizer that iteratively rewrites prompts to maximise a measured score.",
+    "best_for": "Automatically searching for higher-scoring instructions against a metric.",
+    "category": "Optimization",
+    "citation_url": "https://arxiv.org/abs/2309.03409",
+    "authors": ["Chengrun Yang", "Xuezhi Wang", "Yifeng Lu", "et al."],
+    "publishedDate": "2023-09-07",
+    "is_featured": true,
+    "scores": { "research_quality": 9, "practical_value": 7, "prompt_optimization_relevance": 10, "evaluation_relevance": 7 }
+  },
+  {
+    "title": "G-Eval (LLM-as-a-Judge)",
+    "content": "G-Eval scores generated text with an LLM judge by combining a chain-of-thought rubric with a form-filling paradigm: the judge is given evaluation criteria, generates the detailed steps for applying them, then fills in a structured score. This reference-free approach correlates far better with human judgment than BLEU/ROUGE (0.514 Spearman on summarization with GPT-4). It is the canonical template for the kind of rubric-driven, reasoning-then-score judging PromptPilot itself performs, and motivates returning explicit per-criterion reasoning alongside each score.",
+    "summary": "LLM-as-a-judge that pairs a chain-of-thought rubric with structured form-filling for human-aligned scores.",
+    "best_for": "Designing reference-free evaluation rubrics and LLM judges with reasoning + score outputs.",
+    "category": "Evaluation",
+    "citation_url": "https://arxiv.org/abs/2303.16634",
+    "authors": ["Yang Liu", "Dan Iter", "Yichong Xu", "et al."],
+    "publishedDate": "2023-03-29",
+    "is_featured": true,
+    "scores": { "research_quality": 8, "practical_value": 8, "prompt_optimization_relevance": 6, "evaluation_relevance": 10 }
+  },
+  {
+    "title": "Constitutional AI (Self-Critique)",
+    "content": "Constitutional AI replaces human harm labels with a short list of written principles (a 'constitution') the model uses to critique and revise its own responses. At the prompting level the transferable pattern is powerful: give the model explicit principles, ask it to critique a draft against each one, then produce a revised answer honoring them — a structured self-critique that improves safety and instruction-following without retraining. The original work uses this to generate preference data for RLAIF, but the critique-and-revise prompt stands alone.",
+    "summary": "Steers and self-corrects output by having the model critique and revise against explicit written principles.",
+    "best_for": "Encoding safety/style/policy rules and enforcing them via self-critique and revision.",
+    "category": "Alignment",
+    "citation_url": "https://arxiv.org/abs/2212.08073",
+    "authors": ["Yuntao Bai", "Saurav Kadavath", "Sandipan Kundu", "et al."],
+    "publishedDate": "2022-12-15",
+    "is_featured": false,
+    "scores": { "research_quality": 9, "practical_value": 7, "prompt_optimization_relevance": 7, "evaluation_relevance": 7 }
+  },
+  {
+    "title": "Retrieval-Augmented Generation (RAG)",
+    "content": "RAG conditions generation on passages retrieved from an external knowledge source at inference time, rather than relying solely on parametric memory. The prompting pattern that follows is to inject the retrieved context into the prompt as clearly delimited evidence and instruct the model to answer only from it (and to cite or abstain when the context is insufficient), which grounds responses and sharply reduces hallucination on knowledge-intensive tasks. This is the foundational technique behind PromptPilot's own knowledge-vault grounding.",
+    "summary": "Grounds answers by retrieving external passages and instructing the model to answer from that evidence.",
+    "best_for": "Knowledge-intensive Q&A and any task needing up-to-date or source-grounded facts.",
+    "category": "Retrieval",
+    "citation_url": "https://arxiv.org/abs/2005.11401",
+    "authors": ["Patrick Lewis", "Ethan Perez", "Aleksandra Piktus", "et al."],
+    "publishedDate": "2020-05-22",
+    "is_featured": false,
+    "scores": { "research_quality": 9, "practical_value": 9, "prompt_optimization_relevance": 7, "evaluation_relevance": 7 }
+  },
+  {
+    "title": "Toolformer (Tool Use)",
+    "content": "Toolformer shows a model can teach itself when and how to call external tools (calculator, search, calendar, QA APIs) using a self-supervised signal: it inserts candidate API calls into text and keeps only those that reduce next-token loss. The enduring lesson for prompting is to declare available tools with clear signatures and usage conditions, and let the model decide when a call is warranted — the conceptual basis for modern function-calling and tool-augmented agents. It improves zero-shot performance on tasks needing arithmetic, facts, or freshness.",
+    "summary": "Foundational tool-use technique: models decide when to call external APIs to augment their answers.",
+    "best_for": "Designing function-calling / tool-augmented prompts for math, search, and live data.",
+    "category": "Agentic",
+    "citation_url": "https://arxiv.org/abs/2302.04761",
+    "authors": ["Timo Schick", "Jane Dwivedi-Yu", "Roberto Dessì", "et al."],
+    "publishedDate": "2023-02-09",
+    "is_featured": false,
+    "scores": { "research_quality": 8, "practical_value": 7, "prompt_optimization_relevance": 7, "evaluation_relevance": 5 }
+  }
+]
