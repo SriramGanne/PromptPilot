@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import NavTabs from "./_components/NavTabs";
 import BrandMark from "./_components/BrandMark";
+import { getMetricsForDisplay, resolveOverallPercent } from "../lib/evalMetrics.mjs";
 
 const TARGET_MODELS = ["ChatGPT", "Claude", "Gemini", "Grok"];
 const STEPS = [
@@ -1183,15 +1184,15 @@ function CacheStatusCard({ result }) {
 
 function QualityDashboard({ result }) {
   // Prefer the GPT-5-mini judge scores (evaluationResult) when present. The
-  // judge scores faithfulness/relevancy on 0–10 and overall on 0–100; we
-  // normalise to 0–1 for the bars. When the judge was disabled or failed, fall
-  // back to the legacy lexical faithfulness + mean-cosine relevancy so the
-  // dashboard still renders something meaningful (and stays back-compatible
-  // with cached payloads generated before the eval layer).
+  // judge grades every metric on 0–10 and `overall` on 0–100. When the judge was
+  // disabled or failed, fall back to the legacy lexical faithfulness + mean-cosine
+  // relevancy so the dashboard still renders meaningfully (and stays back-compatible
+  // with cached payloads generated before the eval layer / before the new metrics).
   const evalResult =
     result?.evaluationResult && result.evaluationResult.evaluation_failed === false
       ? result.evaluationResult
       : null;
+  const judged = Boolean(evalResult);
 
   const cosineRelevancy = useMemo(() => {
     if (!result?.ragSources?.length) return null;
@@ -1201,14 +1202,30 @@ function QualityDashboard({ result }) {
     );
   }, [result]);
 
-  const judged = Boolean(evalResult);
-  const faithfulness = judged ? evalResult.faithfulness_score / 10 : result?.faithfulnessScore;
-  const relevancy = judged ? evalResult.context_relevancy_score / 10 : cosineRelevancy;
-  const overall = judged
-    ? evalResult.overall_score / 100
-    : faithfulness != null && relevancy != null
-      ? (faithfulness + relevancy) / 2
-      : null;
+  // View-model: one entry per metric, score on 0–10 or null. getMetricsForDisplay
+  // never throws and yields null scores for metrics absent from an old payload —
+  // the card then renders "—" instead of crashing.
+  const metrics = useMemo(() => {
+    const base = getMetricsForDisplay(evalResult);
+    if (judged) return base;
+    // Not judged → backfill the two legacy metrics from the Ragas fallback
+    // (0–1 → 0–10). The three newer metrics stay null ("—").
+    const fallback = {
+      intentFidelity: result?.faithfulnessScore,
+      techniquePreservation: cosineRelevancy,
+    };
+    return base.map((m) =>
+      fallback[m.key] != null ? { ...m, score: fallback[m.key] * 10 } : m
+    );
+  }, [evalResult, judged, result?.faithfulnessScore, cosineRelevancy]);
+
+  // Headline composite (0–100): weighted composite → judge overall → legacy mean.
+  const overallPct = useMemo(() => {
+    if (judged) return resolveOverallPercent(evalResult);
+    const f = result?.faithfulnessScore;
+    const r = cosineRelevancy;
+    return resolveOverallPercent(null, { faithfulness: f, relevancy: r });
+  }, [judged, evalResult, result?.faithfulnessScore, cosineRelevancy]);
 
   return (
     <div className="rounded-2xl border border-border bg-surface/80 p-5 backdrop-blur-sm">
@@ -1222,12 +1239,14 @@ function QualityDashboard({ result }) {
       </div>
 
       <div className="mt-4 space-y-3">
-        <ScoreBar label={judged ? "Intent Fidelity" : "Faithfulness"} value={faithfulness} />
-        <ScoreBar label={judged ? "Technique Use" : "Relevancy"}    value={relevancy} />
+        {metrics.map((m) => (
+          <MetricCard key={m.key} metric={m} />
+        ))}
+
         <div className="mt-3 flex items-center justify-between rounded-lg border border-border-2/60 bg-surface-2/60 px-3 py-2.5">
           <span className="text-[12px] font-semibold text-text-muted">Overall</span>
           <span className="font-mono text-[16px] font-semibold text-accent-2">
-            {overall != null ? (overall * 100).toFixed(0) + "%" : "—"}
+            {overallPct != null ? overallPct.toFixed(0) + "%" : "—"}
           </span>
         </div>
 
@@ -1253,15 +1272,25 @@ function QualityDashboard({ result }) {
   );
 }
 
-function ScoreBar({ label, value }) {
-  const pct = value != null ? Math.max(0, Math.min(1, value)) * 100 : 0;
-  const absent = value == null;
+// One metric row: name (+ help tooltip), 0–10 score, progress bar, and the
+// judge's per-metric reasoning when present. min-w-0 + break-words keep long
+// reasoning from overflowing on mobile; the label row uses gap + shrink so the
+// score never wraps under the title on narrow widths.
+function MetricCard({ metric }) {
+  const { label, tooltip, score, reasoning } = metric;
+  const absent = score == null;
+  const pct = absent ? 0 : Math.max(0, Math.min(10, score)) * 10;
   return (
-    <div>
-      <div className="mb-1 flex items-center justify-between">
-        <span className="text-[12px] font-medium text-text-muted">{label}</span>
-        <span className={`font-mono text-[12px] ${absent ? "text-text-dim" : "text-text"}`}>
-          {absent ? "—" : (pct).toFixed(0) + "%"}
+    <div className="min-w-0">
+      <div className="mb-1 flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-[12px] font-medium text-text-muted">{label}</span>
+          <MetricInfo tooltip={tooltip} />
+        </span>
+        <span
+          className={`shrink-0 font-mono text-[12px] ${absent ? "text-text-dim" : "text-text"}`}
+        >
+          {absent ? "—" : `${score % 1 === 0 ? score : score.toFixed(1)}/10`}
         </span>
       </div>
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
@@ -1270,7 +1299,29 @@ function ScoreBar({ label, value }) {
           style={{ width: `${pct}%` }}
         />
       </div>
+      {reasoning && (
+        <p className="mt-1.5 break-words text-[11px] leading-relaxed text-text-dim">
+          {reasoning}
+        </p>
+      )}
     </div>
+  );
+}
+
+// Accessible help affordance: a small "i" glyph carrying the metric description
+// in a native title tooltip (works on desktop hover and avoids any custom
+// overlay that could overflow the narrow Power-Mode column on mobile).
+function MetricInfo({ tooltip }) {
+  if (!tooltip) return null;
+  return (
+    <span
+      title={tooltip}
+      aria-label={tooltip}
+      role="img"
+      className="inline-flex h-3.5 w-3.5 shrink-0 cursor-help items-center justify-center rounded-full border border-border-2 text-[9px] font-bold leading-none text-text-dim transition hover:border-accent/60 hover:text-accent"
+    >
+      i
+    </span>
   );
 }
 

@@ -701,12 +701,23 @@ export async function POST(request) {
             intent_fidelity:  scored(evaluationResult) ? evaluationResult.faithfulness_score : null,
             technique_used:   scored(evaluationResult) ? evaluationResult.context_relevancy_score : null,
             overall_quality:  scored(evaluationResult) ? evaluationResult.overall_score : null,
+            constraint_adherence: scored(evaluationResult) ? evaluationResult.constraint_adherence_score : null,
+            task_success:         scored(evaluationResult) ? evaluationResult.task_success_score : null,
+            output_quality:       scored(evaluationResult) ? evaluationResult.output_quality_score : null,
+            composite_score:      scored(evaluationResult) ? evaluationResult.composite_score : null,
+            constraint_adherence_reasoning: scored(evaluationResult) ? evaluationResult.constraint_adherence_reasoning : null,
+            task_success_reasoning:         scored(evaluationResult) ? evaluationResult.task_success_reasoning : null,
+            output_quality_reasoning:       scored(evaluationResult) ? evaluationResult.output_quality_reasoning : null,
             refinement_triggered: refinementTriggered,
             // Post-refinement (V2) quality — null unless a V2 was produced and
             // successfully re-evaluated:
             refined_intent_fidelity: scored(afterEval) ? afterEval.faithfulness_score : null,
             refined_technique_used:  scored(afterEval) ? afterEval.context_relevancy_score : null,
             refined_overall_quality: scored(afterEval) ? afterEval.overall_score : null,
+            refined_constraint_adherence: scored(afterEval) ? afterEval.constraint_adherence_score : null,
+            refined_task_success:         scored(afterEval) ? afterEval.task_success_score : null,
+            refined_output_quality:       scored(afterEval) ? afterEval.output_quality_score : null,
+            refined_composite_score:      scored(afterEval) ? afterEval.composite_score : null,
             rag_sources_count: ragChunks.length,
           });
           if (dbErr) console.error("Supabase log error:", dbErr.message);
