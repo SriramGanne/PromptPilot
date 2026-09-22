@@ -1,8 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-
-const CATEGORIES = ["All", "Reasoning", "Structure", "Accuracy", "Advanced"];
+import { categoryForEntry, getVaultCategories, countVaultCategories, filterVaultEntries } from "../../lib/vaultDisplay.mjs";
 
 // Category pill colour — the vault stays colour-coded for fast scanning.
 const CATEGORY_STYLES = {
@@ -10,6 +9,11 @@ const CATEGORY_STYLES = {
   Structure: "bg-accent-2/15 text-accent-2",
   Accuracy:  "bg-success/15 text-success",
   Advanced:  "bg-warning/15 text-warning",
+  Agentic:   "bg-accent/15 text-accent",
+  Evaluation: "bg-success/15 text-success",
+  Optimization: "bg-accent-2/15 text-accent-2",
+  Alignment: "bg-success/15 text-success",
+  Retrieval: "bg-accent/15 text-accent",
   // Legacy "Style" rows still render with their original tint until re-tagged.
   Style:     "bg-warning/15 text-warning",
   default:   "bg-border-2/40 text-text-muted",
@@ -19,31 +23,9 @@ export default function VaultClient({ entries, error }) {
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("All");
 
-  // Count per category — used for the chip labels "Reasoning (4)", etc.
-  const countsByCategory = useMemo(() => {
-    const counts = { All: entries.length };
-    for (const c of CATEGORIES) if (c !== "All") counts[c] = 0;
-    for (const e of entries) {
-      if (e.category && counts[e.category] != null) counts[e.category]++;
-    }
-    return counts;
-  }, [entries]);
-
-  // Apply category + free-text search. Client-side is fine — featured
-  // entries are a small editorial set, never thousands of rows.
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return entries.filter((e) => {
-      if (category !== "All" && e.category !== category) return false;
-      if (!q) return true;
-      return (
-        e.title?.toLowerCase().includes(q) ||
-        e.summary?.toLowerCase().includes(q) ||
-        e.best_for?.toLowerCase().includes(q) ||
-        e.category?.toLowerCase().includes(q)
-      );
-    });
-  }, [entries, query, category]);
+  const categories = useMemo(() => getVaultCategories(entries), [entries]);
+  const countsByCategory = useMemo(() => countVaultCategories(entries), [entries]);
+  const filtered = useMemo(() => filterVaultEntries(entries, { query, category }), [entries, query, category]);
 
   const clearFilters = () => { setQuery(""); setCategory("All"); };
 
@@ -62,8 +44,8 @@ export default function VaultClient({ entries, error }) {
           our optimization engine.
         </p>
         <p className="mt-2 text-sm leading-relaxed text-text-dim">
-          Search or filter by category to explore what's in the corpus —
-          every entry grounds the RAG layer of every optimization.
+          Browse every active source available to the optimization engine.
+          Each optimization retrieves the sources most relevant to your task.
         </p>
       </div>
 
@@ -71,7 +53,7 @@ export default function VaultClient({ entries, error }) {
       <div className="mb-8 space-y-4">
         <SearchInput value={query} onChange={setQuery} />
         <CategoryChips
-          categories={CATEGORIES}
+          categories={categories}
           selected={category}
           counts={countsByCategory}
           onChange={setCategory}
@@ -112,6 +94,7 @@ function SearchInput({ value, onChange }) {
       </span>
       <input
         type="search"
+        aria-label="Search research"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Search practices by keyword, technique, or use case…"
@@ -145,6 +128,7 @@ function CategoryChips({ categories, selected, counts, onChange }) {
           <button
             key={c}
             type="button"
+            aria-pressed={active}
             onClick={() => onChange(c)}
             className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition ${
               active
@@ -180,7 +164,7 @@ function VaultCard({ entry }) {
         <span
           className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] ${categoryCls}`}
         >
-          {entry.category || "Uncategorized"}
+          {categoryForEntry(entry)}
         </span>
         {entry.citation_url && (
           <span className="text-text-dim transition group-hover:text-accent-2">
@@ -242,12 +226,7 @@ function ErrorState({ error }) {
         Vault unavailable
       </div>
       <p className="mt-2 text-sm text-text-muted">{error}</p>
-      <p className="mt-3 text-xs text-text-dim">
-        If the <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">is_featured</code> /
-        {" "}<code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono">category</code> columns
-        don't exist yet, run the migration in the SQL block at the top of
-        <code className="ml-1 rounded bg-surface-2 px-1.5 py-0.5 font-mono">lib/supabase.js</code>.
-      </p>
+      <p className="mt-3 text-xs text-text-dim">Please try again shortly.</p>
     </div>
   );
 }
@@ -259,14 +238,7 @@ function EmptyVaultState() {
         Vault is empty
       </div>
       <p className="mx-auto mt-2 max-w-md text-sm text-text-muted">
-        No featured entries yet. Mark a row in{" "}
-        <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[12px]">
-          prompt_research
-        </code>{" "}
-        with <code className="rounded bg-surface-2 px-1.5 py-0.5 font-mono text-[12px]">
-          is_featured = true
-        </code>{" "}
-        to see it here.
+        No active research sources are currently available. Please check back later.
       </p>
     </div>
   );
