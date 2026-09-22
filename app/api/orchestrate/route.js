@@ -5,6 +5,7 @@ import { getCachedResult, setCachedResult } from "../../../lib/semanticCache";
 import { enforceRateLimit, getClientIp } from "../../../lib/ratelimit";
 import { evaluatePrompt } from "../../../lib/evaluatePrompt";
 import { refinePrompt } from "../../../lib/refinePrompt";
+import { REASONING_MODEL, EMBEDDING_MODEL, EMBEDDING_DIM } from "../../../lib/models.mjs";
 
 // ---------------------------------------------------------------------------
 // Input validation constants
@@ -13,7 +14,6 @@ import { refinePrompt } from "../../../lib/refinePrompt";
 const ALLOWED_TARGET_MODELS = ["ChatGPT", "Claude", "Gemini", "Grok"];
 const MIN_INPUT_LEN = 3;
 const MAX_INPUT_LEN = 4000;   // ~3000 tokens max — covers any realistic intent
-const EXPECTED_EMBED_DIM = 1024;
 
 // Tokens/markers that only our system prompt should emit. If a user's raw
 // intent contains any of these, a clever attacker could trick the client-side
@@ -84,19 +84,18 @@ const together = new OpenAI({
 });
 
 // ---------------------------------------------------------------------------
-// Model constants
+// Call limits
 // ---------------------------------------------------------------------------
 
-/** GLM-5.3-Flash (320B total / 18B active, MoE) — used for structured reasoning tasks (gap analysis + synthesis) */
-const REASONING_MODEL = "zai-org/GLM-5.3-Flash";
-
-/** Must match the model used in scripts/ingest_research.mjs → 1024-dim vectors */
-const EMBEDDING_MODEL = "intfloat/multilingual-e5-large-instruct";
-
-// Hard ceiling for the synthesis call. Generous (synthesis legitimately runs
-// ~20-30s on Gemma) — this only trips on a genuinely hung provider so the
-// request fails fast instead of stalling the user on the skeleton forever.
+// Timeouts only trip on a genuinely hung provider so the request fails fast
+// instead of stalling the user on the skeleton forever.
 const SYNTHESIS_TIMEOUT_MS = 60000;
+const GAP_ANALYSIS_TIMEOUT_MS = 30000;
+
+// Runaway guards, not budgets. GLM-5.3-Flash's reasoning tokens count toward
+// max_tokens alongside the visible content, so these are deliberately loose.
+const GAP_ANALYSIS_MAX_TOKENS = 2000;
+const SYNTHESIS_MAX_TOKENS = 8000;
 
 // ---------------------------------------------------------------------------
 // Prompt templates
@@ -202,22 +201,25 @@ Rules:
 - Return at most 3 questions, each under 15 words.`;
 
 async function analyzeGaps(userInput) {
-  const response = await together.chat.completions.create({
-    model: REASONING_MODEL,
-    messages: [
-      { role: "system", content: GAP_ANALYSIS_SYSTEM },
-      { role: "user", content: userInput },
-    ],
-    temperature: 0.1,
-    max_tokens: 300,
-  });
+  const response = await together.chat.completions.create(
+    {
+      model: REASONING_MODEL,
+      messages: [
+        { role: "system", content: GAP_ANALYSIS_SYSTEM },
+        { role: "user", content: userInput },
+      ],
+      temperature: 0.1,
+      max_tokens: GAP_ANALYSIS_MAX_TOKENS,
+    },
+    { timeout: GAP_ANALYSIS_TIMEOUT_MS, maxRetries: 1 }
+  );
 
   const raw = response.choices[0].message.content.trim();
   const parsed = extractJSON(raw);
 
   if (!parsed) {
     // Default to INSUFFICIENT on parse failure — not sufficient. The prior
-    // default let adversarial inputs (that made Gemma emit prose instead of
+    // default let adversarial inputs (that made the model emit prose instead of
     // JSON) bypass the cheap gatekeeper and force the expensive synthesis
     // path on every call. A generic clarifying question is the correct
     // fail-safe: cheap, informative to the user, and not exploitable.
@@ -257,9 +259,9 @@ async function embedQuery(text) {
   // Hard assert: if Together returns a differently-sized vector (provider hiccup
   // or silent model swap), cosineSimilarity would silently produce NaN and we'd
   // pollute the cache + fail the Supabase RPC. Fail loudly instead.
-  if (!Array.isArray(embedding) || embedding.length !== EXPECTED_EMBED_DIM) {
+  if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIM) {
     throw new Error(
-      `Embedding dimension mismatch: expected ${EXPECTED_EMBED_DIM}, got ${embedding?.length ?? "invalid"}`
+      `Embedding dimension mismatch: expected ${EMBEDDING_DIM}, got ${embedding?.length ?? "invalid"}`
     );
   }
   return embedding;
@@ -539,7 +541,7 @@ export async function POST(request) {
           targetModel,
         });
 
-        // ── Stage 3 — Gemma Optimization V1 (non-streaming) ───────────────
+        // ── Stage 3 — GLM Optimization V1 (non-streaming) ───────────────
         // Eval Layer V1 buffers the full V1 instead of streaming tokens: the
         // judge + optional refinement decide the FINAL prompt, so streaming a
         // V1 we might discard would be misleading. Isolated try/catch so a
@@ -555,7 +557,7 @@ export async function POST(request) {
                 { role: "user", content: userInput },
               ],
               temperature: 0.4,
-              max_tokens: 1800,
+              max_tokens: SYNTHESIS_MAX_TOKENS,
             },
             // Bound the call: one retry max so a timeout can't be multiplied by
             // the SDK's default 2 retries into a multi-minute hang.

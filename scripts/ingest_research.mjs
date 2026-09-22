@@ -25,12 +25,12 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
 import OpenAI from "openai";
+import { EMBEDDING_MODEL } from "../lib/models.mjs";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const EMBEDDING_MODEL   = "intfloat/multilingual-e5-large-instruct"; // 1024-dim retrieval model
 const PASSAGE_PREFIX    = "passage: ";               // required by e5-large-instruct for docs
 const DEFAULT_SEED_PATH = "data/seed_research.json";
 const INSERT_BATCH_SIZE = 10;                        // rows per DB insert
