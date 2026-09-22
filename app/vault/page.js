@@ -3,6 +3,7 @@ import { supabase } from "../../lib/supabase";
 import NavTabs from "../_components/NavTabs";
 import BrandMark from "../_components/BrandMark";
 import VaultClient from "./VaultClient";
+import { fetchVaultEntries } from "../../lib/vaultDisplay.mjs";
 
 // Always fetch fresh on request — the vault is editorial content that
 // changes infrequently but shouldn't be baked into the build output.
@@ -11,33 +12,21 @@ export const dynamic = "force-dynamic";
 export const metadata = {
   title: "Knowledge Vault · PromptPilot",
   description:
-    "Curated research on prompting techniques — Reasoning, Structure, Style.",
+    "Explore the active research and guidance behind PromptPilot's prompt optimization engine.",
 };
 
 /**
- * Server Component: queries prompt_research for featured entries.
+ * Server Component: displays every active, retrieval-enabled research entry.
  * Hands the result set (or an error string) to the Client Component for
- * search/filter interactivity. Degrades gracefully if the migration hasn't
- * been run — the error message surfaces the migration hint in the UI.
+ * search/filter interactivity. Retrieval lifecycle state controls visibility;
+ * the editorial is_featured flag must not hide part of the active corpus.
  */
 export default async function VaultPage() {
   let entries = [];
   let error = null;
 
   try {
-    const { data, error: dbError } = await supabase
-      .from("prompt_research")
-      .select("id, title, summary, best_for, citation_url, category")
-      .eq("is_featured", true)
-      // Archived, merged, watch and reference-only records must never be
-      // presented as active core guidance. Fail closed without lifecycle data.
-      .eq("status", "active")
-      .eq("retrieval_enabled", true)
-      .order("category", { ascending: true })
-      .order("title", { ascending: true });
-
-    if (dbError) throw dbError;
-    entries = data ?? [];
+    entries = await fetchVaultEntries(supabase);
   } catch (err) {
     // Log details server-side; return a generic message to the browser. Raw
     // Supabase errors can reveal schema hints, missing columns, or RLS state.
