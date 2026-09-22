@@ -87,8 +87,8 @@ const together = new OpenAI({
 // Model constants
 // ---------------------------------------------------------------------------
 
-/** Gemma 3 27B — used for structured reasoning tasks (gap analysis + synthesis) */
-const REASONING_MODEL = "google/gemma-3n-E4B-it";
+/** GLM-5.3-Flash (320B total / 18B active, MoE) — used for structured reasoning tasks (gap analysis + synthesis) */
+const REASONING_MODEL = "zai-org/GLM-5.3-Flash";
 
 /** Must match the model used in scripts/ingest_research.mjs → 1024-dim vectors */
 const EMBEDDING_MODEL = "intfloat/multilingual-e5-large-instruct";

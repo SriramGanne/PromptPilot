@@ -11,7 +11,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 ## ✨ Key Product Features
 * **Agentic Interviewer:** Uses a "Gap Analysis" logic to identify missing variables (Context, Persona, Format) and asks targeted follow-up questions before generating.
 * **Knowledge Vault (RAG):** A curated library of 2026 prompt engineering research. Every prompt is grounded in techniques like *Chain-of-Thought*, *Chain-of-Density*, and *Self-Consistency*.
-* **Asymmetric Reasoning:** Powered by **Gemma 3n E4B**, utilizing Matryoshka embeddings and Per-Layer Embedding (PLE) caching for high-density logic with sub-400ms latency.
+* **Asymmetric Reasoning:** Powered by **GLM-5.3-Flash**, a 320B-parameter Mixture-of-Experts model (18B active) delivering high-density logic at low latency.
 * **Power Mode:** Provides a transparent "Reasoning Trace" (`<thinking>` tags), showing the user exactly how the AI interpreted their request.
 * **Model-Aware Optimization:** Tailors output structure specifically for the target model (Claude, GPT-4, Gemini, or Grok).
 
@@ -21,7 +21,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 
 
 ### The Intelligence Stack
-* **Core Logic:** `google/gemma-3n-e4b-it` (optimized for latency-to-logic efficiency).
+* **Core Logic:** `zai-org/GLM-5.3-Flash` (MoE, 320B total / 18B active parameters, optimized for latency-to-logic efficiency).
 * **Vector Database:** `Supabase (pgvector)` storing 1024-dimension embeddings.
 * **Embedding Model:** `intfloat/multilingual-e5-large-instruct` (utilizing `passage:`/`query:` instruction prefixes).
 * **Semantic Cache:** `Upstash Redis` to reduce COGS and latency for redundant high-intent queries.
@@ -29,7 +29,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 ### Evaluator-Optimizer Design Pattern
 PromptPilot doesn't just "guess." It follows a closed-loop system:
 1.  **Ingestion:** RAG retrieval of best practices.
-2.  **Synthesis:** Gemma 3 generates the "Improved Prompt."
+2.  **Synthesis:** GLM-5.3-Flash generates the "Improved Prompt."
 3.  **Audit:** Internal regression testing against a G-Eval rubric (Faithfulness, Specificity, Structure).
 
 ---
