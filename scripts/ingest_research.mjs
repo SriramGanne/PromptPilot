@@ -24,14 +24,12 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
-import { EMBEDDING_MODEL } from "../lib/models.mjs";
+import { embedText } from "../lib/embeddings.mjs";
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
-const PASSAGE_PREFIX    = "passage: ";               // required by e5-large-instruct for docs
 const DEFAULT_SEED_PATH = "data/seed_research.json";
 const INSERT_BATCH_SIZE = 10;                        // rows per DB insert
 const EMBED_DELAY_MS    = 200;                       // courtesy delay between API calls
@@ -42,7 +40,7 @@ const EMBED_DELAY_MS    = 200;                       // courtesy delay between A
 
 function buildClients() {
   const missing = [
-    "TOGETHER_API_KEY",
+    "OPENAI_API_KEY",
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
   ].filter((k) => !process.env[k]);
@@ -53,17 +51,12 @@ function buildClients() {
     process.exit(1);
   }
 
-  const together = new OpenAI({
-    apiKey: process.env.TOGETHER_API_KEY,
-    baseURL: "https://api.together.xyz/v1",
-  });
-
   const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  return { together, supabase };
+  return { supabase };
 }
 
 // ---------------------------------------------------------------------------
@@ -129,26 +122,15 @@ async function fetchExistingTitles(supabase) {
 // ---------------------------------------------------------------------------
 
 /**
- * Generate a 1024-dim vector for a single document string.
- * e5-large-instruct requires the "passage: " prefix at ingest time
- * (and "query: " at retrieval time — handled separately by searchResearch).
+ * Embed a single document string via the shared lib/embeddings.mjs path.
  * Retries on transient 5xx / network errors with exponential backoff.
  */
-async function embed(client, text) {
-  const input = `${PASSAGE_PREFIX}${text}`;
+async function embed(text) {
   const MAX_RETRIES = 4;
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await client.embeddings.create({
-        model: EMBEDDING_MODEL,
-        input,
-      });
-      const vec = response.data[0].embedding;
-      if (vec.length !== 1024) {
-        throw new Error(`Expected 1024-dim embedding, got ${vec.length}`);
-      }
-      return vec;
+      return await embedText(text);
     } catch (err) {
       const status = err?.status ?? err?.response?.status;
       const retryable = !status || status === 503 || status === 502 || status === 429 || status >= 500;
@@ -175,7 +157,7 @@ async function insertBatch(supabase, rows) {
 
 async function main() {
   const filePath = resolve(process.argv[2] ?? DEFAULT_SEED_PATH);
-  const { together, supabase } = buildClients();
+  const { supabase } = buildClients();
 
   console.log(`Reading ${filePath}…`);
   const entries = readSeedJson(filePath);
@@ -231,7 +213,7 @@ async function main() {
     const e = fresh[i];
     console.log(`  [${i + 1}/${fresh.length}] Embedding: "${e.title}"`);
 
-    const embedding = await embed(together, e.content);
+    const embedding = await embed(e.content);
     rows.push({
       title:        e.title,
       content:      e.content,

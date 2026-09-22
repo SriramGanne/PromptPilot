@@ -32,7 +32,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createClient } from "@supabase/supabase-js";
-import OpenAI from "openai";
 import {
   runCuration,
   formatReport,
@@ -53,7 +52,7 @@ function parseArgs(argv) {
 }
 
 function buildClients() {
-  const missing = ["TOGETHER_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter(
+  const missing = ["OPENAI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"].filter(
     (k) => !process.env[k]
   );
   if (missing.length) {
@@ -61,12 +60,8 @@ function buildClients() {
     console.error("Run with: node --env-file=.env.local scripts/curate_research.mjs ...");
     process.exit(1);
   }
-  const together = new OpenAI({
-    apiKey: process.env.TOGETHER_API_KEY,
-    baseURL: "https://api.together.xyz/v1",
-  });
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-  return { together, supabase };
+  return { supabase };
 }
 
 async function collectCandidates(args) {
@@ -98,14 +93,13 @@ async function main() {
   const minScore = args["min-score"] ? Number(args["min-score"]) : DEFAULT_MIN_SCORE;
   const simThreshold = args.sim ? Number(args.sim) : DEFAULT_SIM_THRESHOLD;
 
-  const { together, supabase } = buildClients();
+  const { supabase } = buildClients();
   const { candidates, sourceTag } = await collectCandidates(args);
 
   console.log(`Mode: ${ingest ? "INGEST (will write)" : "DRY-RUN (no writes)"} | minScore=${minScore} | simThreshold=${simThreshold}\n`);
 
   const report = await runCuration({
     supabase,
-    together,
     candidates,
     ingest,
     minScore,

@@ -23,7 +23,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 ### The Intelligence Stack
 * **Core Logic:** `zai-org/GLM-5.3-Flash` (MoE, 320B total / 18B active parameters, optimized for latency-to-logic efficiency).
 * **Vector Database:** `Supabase (pgvector)` storing 1024-dimension embeddings.
-* **Embedding Model:** `intfloat/multilingual-e5-large-instruct` (utilizing `passage:`/`query:` instruction prefixes).
+* **Embedding Model:** OpenAI `text-embedding-3-small` at 1024 dimensions (shared by ingest, curation, and query-time retrieval via `lib/embeddings.mjs`).
 * **Semantic Cache:** `Upstash Redis` to reduce COGS and latency for redundant high-intent queries.
 
 ### Evaluator-Optimizer Design Pattern
@@ -45,8 +45,9 @@ PromptPilot doesn't just "guess." It follows a closed-loop system:
 
 ### Prerequisites
 * Node.js 20.6.0+
-* Together AI API Key
-* Supabase Project (with `pgvector` enabled)
+* Together AI API Key (reasoning model)
+* OpenAI API Key (embeddings + LLM-as-a-judge evaluation)
+* Supabase Project (with `pgvector` enabled — schema in `lib/supabase.js`)
 * Upstash Redis (for semantic caching)
 
 ### Installation
@@ -59,8 +60,9 @@ PromptPilot doesn't just "guess." It follows a closed-loop system:
     Create a `.env.local` file:
     ```env
     TOGETHER_API_KEY=your_key
-    NEXT_PUBLIC_SUPABASE_URL=your_url
-    NEXT_PUBLIC_SUPABASE_ANON_KEY=your_key
+    OPENAI_API_KEY=your_key
+    SUPABASE_URL=your_url
+    SUPABASE_SERVICE_ROLE_KEY=your_key
     UPSTASH_REDIS_REST_URL=your_url
     UPSTASH_REDIS_REST_TOKEN=your_token
     ```

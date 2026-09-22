@@ -5,7 +5,8 @@ import { getCachedResult, setCachedResult } from "../../../lib/semanticCache";
 import { enforceRateLimit, getClientIp } from "../../../lib/ratelimit";
 import { evaluatePrompt } from "../../../lib/evaluatePrompt";
 import { refinePrompt } from "../../../lib/refinePrompt";
-import { REASONING_MODEL, EMBEDDING_MODEL, EMBEDDING_DIM } from "../../../lib/models.mjs";
+import { REASONING_MODEL } from "../../../lib/models.mjs";
+import { embedText } from "../../../lib/embeddings.mjs";
 
 // ---------------------------------------------------------------------------
 // Input validation constants
@@ -248,32 +249,30 @@ async function analyzeGaps(userInput) {
 // Stage 2a — Embedding
 // ---------------------------------------------------------------------------
 
+// The embedding only feeds the semantic cache and RAG retrieval, both of which
+// already degrade to a no-op. So an embedding failure must not fail the
+// request — resolve to null and let those stages skip.
 async function embedQuery(text) {
-  // e5-large-instruct requires "query: " prefix at retrieval time
-  // (docs are embedded with "passage: " in scripts/ingest_research.mjs).
-  const response = await together.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: `query: ${text}`,
-  });
-  const embedding = response.data[0].embedding;
-  // Hard assert: if Together returns a differently-sized vector (provider hiccup
-  // or silent model swap), cosineSimilarity would silently produce NaN and we'd
-  // pollute the cache + fail the Supabase RPC. Fail loudly instead.
-  if (!Array.isArray(embedding) || embedding.length !== EMBEDDING_DIM) {
-    throw new Error(
-      `Embedding dimension mismatch: expected ${EMBEDDING_DIM}, got ${embedding?.length ?? "invalid"}`
-    );
+  try {
+    return await embedText(text);
+  } catch (err) {
+    console.warn("[generate] embedding failed — skipping cache + RAG:", err?.message);
+    return null;
   }
-  return embedding;
 }
 
 // ---------------------------------------------------------------------------
 // Stage 2b — RAG retrieval (enriched with citation_url)
 // ---------------------------------------------------------------------------
 
+// Threshold calibrated for text-embedding-3-small over the seed vault: genuine
+// task→technique matches land at 0.27-0.42, unrelated ones at <=0.22. (The
+// old 0.65 was for e5, whose baseline similarity is ~0.8 for anything.)
+const RAG_MATCH_THRESHOLD = 0.25;
+
 async function retrieveContext(embedding) {
   try {
-    const chunks = await searchResearch(embedding, { matchCount: 3, matchThreshold: 0.65 });
+    const chunks = await searchResearch(embedding, { matchCount: 3, matchThreshold: RAG_MATCH_THRESHOLD });
     if (!chunks.length) return [];
 
     // The match_prompt_research RPC only returns id/title/content/similarity.
@@ -514,7 +513,7 @@ export async function POST(request) {
         }
 
         // ── Semantic cache ────────────────────────────────────────────────
-        const cached = await getCachedResult(queryEmbedding, targetModel);
+        const cached = queryEmbedding ? await getCachedResult(queryEmbedding, targetModel) : null;
         if (cached) {
           send({ type: "cached", ...cached });
           controller.close();
@@ -523,7 +522,7 @@ export async function POST(request) {
 
         // ── Stage 2b — RAG retrieval ──────────────────────────────────────
         send({ type: "stage", key: "retrieving", label: "Retrieving prompting techniques…" });
-        const ragChunks = await retrieveContext(queryEmbedding);
+        const ragChunks = queryEmbedding ? await retrieveContext(queryEmbedding) : [];
         const originalTokens = estimateTokens(userInput);
 
         const ragSources = ragChunks.map((c) => ({
@@ -676,9 +675,11 @@ export async function POST(request) {
         controller.close();
 
         // ── Fire-and-forget: cache write + metrics log ────────────────────
-        setCachedResult(queryEmbedding, targetModel, finalPayload).catch((err) =>
-          console.warn("Cache write failed (non-fatal):", err.message)
-        );
+        if (queryEmbedding) {
+          setCachedResult(queryEmbedding, targetModel, finalPayload).catch((err) =>
+            console.warn("Cache write failed (non-fatal):", err.message)
+          );
+        }
 
         // ── Background: post-refinement re-evaluation + quality metrics log ──
         // Runs AFTER the response is sent, so the second judge call (only when
