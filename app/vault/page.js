@@ -45,7 +45,8 @@ export default async function VaultPage() {
     <div className="min-h-screen text-text">
       {/* Header — same aesthetic as the Optimizer page but no Power toggle */}
       <header className="sticky top-0 z-30 border-b border-border/60 bg-bg/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-6 py-4">
+        {/* Wraps to two rows on phones — see the Optimizer header for why. */}
+        <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-x-4 gap-y-3 px-6 py-4">
           <div className="flex items-center gap-6">
             <Link href="/" className="flex items-center gap-3" aria-label="PromptPilot home">
               {/* Wordmark already includes the "PromptPilot" text (see
@@ -58,6 +59,10 @@ export default async function VaultPage() {
           </div>
           <div className="text-[11px] font-medium uppercase tracking-[0.16em] text-text-dim">
             {entries.length} {entries.length === 1 ? "entry" : "entries"}
+          </div>
+
+          <div className="order-last w-full sm:hidden">
+            <NavTabs />
           </div>
         </div>
       </header>

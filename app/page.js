@@ -5,11 +5,13 @@ import Link from "next/link";
 import NavTabs from "./_components/NavTabs";
 import BrandMark from "./_components/BrandMark";
 import { getMetricsForDisplay, resolveOverallPercent } from "../lib/evalMetrics.mjs";
+import { MAX_INPUT_LEN, INPUT_COUNTER_THRESHOLD } from "../lib/limits.mjs";
 
 const TARGET_MODELS = ["ChatGPT", "Claude", "Gemini", "Grok"];
 const STEPS = [
   { id: 1, label: "Intent" },
-  { id: 2, label: "Clarification" },
+  // `short` is used at phone width, where "Clarification" clipped to "Clari…".
+  { id: 2, label: "Clarification", short: "Clarify" },
   { id: 3, label: "Result" },
 ];
 
@@ -92,6 +94,9 @@ export default function Home() {
   // Without this, a user who hits Start Over mid-generation keeps the server
   // streaming tokens to /dev/null — we pay Together AI for output nobody sees.
   const abortRef = useRef(null);
+  // Last submitted request, so "Try again" can re-run it after a failure
+  // without the user retyping their intent or re-answering clarifications.
+  const lastRequestRef = useRef(null);
 
   // Transient "generation complete" flag — drives a fade-out border pulse.
   const [justCompleted, setJustCompleted] = useState(false);
@@ -147,6 +152,7 @@ export default function Home() {
   // We update state incrementally so the optimized prompt renders as it is
   // generated, not after the full synthesis completes.
   async function callApi(userInput, { skipClarification = false } = {}) {
+    lastRequestRef.current = { userInput, skipClarification };
     // Abort any in-flight request from a previous run before starting a new
     // one. The signal is passed to fetch, so the browser tears down the TCP
     // stream and Node's ReadableStream errors on the server, which ends the
@@ -191,6 +197,7 @@ export default function Home() {
         serverMsg = errBody?.error ?? null;
       } catch { /* not JSON — ignore */ }
       setError(serverMsg || `Request failed (${res.status})`);
+      setResult((prev) => (prev ? { ...prev, streaming: false } : prev));
       return;
     }
 
@@ -269,6 +276,9 @@ export default function Home() {
           break;
         case "error":
           setError(ev.error || "Stream error");
+          // Clear `streaming` too, or the result panel keeps shimmering its
+          // loading skeleton forever behind the error banner.
+          setResult((prev) => (prev ? { ...prev, streaming: false } : prev));
           advanceStage(null);
           break;
       }
@@ -298,6 +308,7 @@ export default function Home() {
       // else is a real network hiccup mid-stream.
       if (err.name !== "AbortError") {
         setError("Stream interrupted. Please try again.");
+        setResult((prev) => (prev ? { ...prev, streaming: false } : prev));
       }
     } finally {
       // Only clear the ref if it's still ours — callApi() may have already
@@ -340,6 +351,12 @@ export default function Home() {
     startTransition(() =>
       callApi(intent.trim(), { skipClarification: true })
     );
+  }
+
+  function handleRetry() {
+    const last = lastRequestRef.current;
+    if (!last) return;
+    startTransition(() => callApi(last.userInput, { skipClarification: last.skipClarification }));
   }
 
   function handleStartOver() {
@@ -418,9 +435,20 @@ export default function Home() {
             {error && (
               <div
                 role="alert"
-                className="mx-6 mt-6 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger"
+                className="mx-6 mt-6 flex flex-col gap-3 rounded-xl border border-danger/40 bg-danger/10 px-4 py-3 text-sm text-danger sm:flex-row sm:items-center sm:justify-between"
               >
-                {error}
+                <span>{error}</span>
+                {/* The intent survives a failure, so re-running it is one
+                    click — previously the only way out was "Start over". */}
+                {lastRequestRef.current && (
+                  <button
+                    onClick={handleRetry}
+                    disabled={isPending}
+                    className="shrink-0 self-start rounded-lg border border-danger/50 bg-danger/10 px-3 py-2 text-[13px] font-medium text-danger transition hover:bg-danger/20 disabled:opacity-40 sm:self-auto"
+                  >
+                    {isPending ? "Retrying…" : "Try again"}
+                  </button>
+                )}
               </div>
             )}
 
@@ -489,7 +517,10 @@ export default function Home() {
 function Header({ powerMode, setPowerMode, isRefining }) {
   return (
     <header className="sticky top-0 z-30 border-b border-border/60 bg-bg/80 backdrop-blur-md">
-      <div className="mx-auto flex max-w-[1280px] items-center justify-between gap-4 px-6 py-4">
+      {/* Two rows on phones: brand + toggle, then the nav pills underneath.
+          The three elements do not fit on one 375px row, and hiding the nav
+          (the previous `hidden sm:block`) made /vault unreachable on mobile. */}
+      <div className="mx-auto flex max-w-[1280px] flex-wrap items-center justify-between gap-x-4 gap-y-3 px-6 py-4">
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-3" aria-label="PromptPilot home">
             {/* Logo pulses softly whenever an agentic run is active, so
@@ -505,6 +536,10 @@ function Header({ powerMode, setPowerMode, isRefining }) {
         </div>
 
         <PowerToggle enabled={powerMode} onChange={setPowerMode} />
+
+        <div className="order-last w-full sm:hidden">
+          <NavTabs />
+        </div>
       </div>
     </header>
   );
@@ -532,7 +567,7 @@ function PowerToggle({ enabled, onChange }) {
         >
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
-        <span className={enabled ? "text-text" : "text-text-muted"}>Power Mode</span>
+        <span className={`whitespace-nowrap ${enabled ? "text-text" : "text-text-muted"}`}>Power Mode</span>
       </span>
       {/* Track: h-6 w-12 rounded-full. Knob: h-5 w-5 with p-0.5 padding, so
           on-state translates by exactly track_w − knob_w − 2·padding = 48 − 20 − 4 = 24px
@@ -580,7 +615,8 @@ function Stepper({ currentStep }) {
                 state === "upcoming" ? "text-text-dim" : "text-text"
               }`}
             >
-              {s.label}
+              <span className={s.short ? "sm:hidden" : undefined}>{s.short ?? s.label}</span>
+              {s.short && <span className="hidden sm:inline">{s.label}</span>}
             </span>
             {idx < STEPS.length - 1 && (
               <div
@@ -601,6 +637,8 @@ function Stepper({ currentStep }) {
 // ═══════════════════════════════════════════════════════════════════════════
 
 function StepIntent({ intentRef, intent, setIntent, targetModel, setTargetModel, onSubmit, isPending }) {
+  const atLimit = intent.length >= MAX_INPUT_LEN;
+
   return (
     <form onSubmit={onSubmit} className="p-6 sm:p-8">
       <h2 className="text-lg font-semibold text-text">What are you trying to do?</h2>
@@ -613,10 +651,38 @@ function StepIntent({ intentRef, intent, setIntent, targetModel, setTargetModel,
         ref={intentRef}
         value={intent}
         onChange={(e) => setIntent(e.target.value)}
+        // maxLength mirrors the server's MAX_INPUT_LEN: without it a long
+        // pasted brief was accepted here and came back as a bare 413.
+        maxLength={MAX_INPUT_LEN}
+        // Submit on ⌘/Ctrl+Enter — plain Enter must stay a newline, since
+        // intents are routinely multi-line.
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && intent.trim() && !isPending) {
+            e.preventDefault();
+            onSubmit(e);
+          }
+        }}
         rows={8}
         placeholder="e.g. Help me write a weekly update email to engineering leadership summarising our sprint outcomes…"
         className="mt-5 w-full resize-y rounded-xl border border-border bg-surface-2 px-4 py-3.5 text-[14px] leading-relaxed text-text placeholder:text-text-dim outline-none transition focus:border-accent/60 focus:ring-2 focus:ring-accent/20"
       />
+
+      <div className="mt-2 flex items-center justify-between gap-3 text-[11px] text-text-dim">
+        <span className="hidden sm:inline">
+          <kbd className="rounded border border-border-2 bg-surface-2 px-1.5 py-0.5 font-sans">⌘</kbd>
+          {" + "}
+          <kbd className="rounded border border-border-2 bg-surface-2 px-1.5 py-0.5 font-sans">↵</kbd>
+          {" to continue"}
+        </span>
+        {/* Counter appears only near the ceiling — see INPUT_COUNTER_THRESHOLD. */}
+        {intent.length >= MAX_INPUT_LEN * INPUT_COUNTER_THRESHOLD && (
+          <span className={atLimit ? "font-medium text-danger" : ""}>
+            {atLimit
+              ? `Character limit reached (${MAX_INPUT_LEN.toLocaleString()})`
+              : `${intent.length.toLocaleString()} / ${MAX_INPUT_LEN.toLocaleString()}`}
+          </span>
+        )}
+      </div>
 
       <div className="mt-5 flex flex-col-reverse items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2.5">
@@ -813,13 +879,13 @@ function StepResult({
           <button
             onClick={onCopy}
             disabled={!optimizedPrompt}
-            className="rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-[13px] font-medium text-accent transition hover:bg-accent/20 disabled:opacity-40"
+            className="inline-flex min-h-11 items-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-[13px] font-medium text-accent transition hover:bg-accent/20 disabled:opacity-40 sm:min-h-0"
           >
             {copied ? "✓ Copied" : "Copy prompt"}
           </button>
           <button
             onClick={onStartOver}
-            className="rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-[13px] font-medium text-text-muted transition hover:border-border-2 hover:text-text"
+            className="inline-flex min-h-11 items-center rounded-lg border border-border bg-surface-2 px-3 py-1.5 text-[13px] font-medium text-text-muted transition hover:border-border-2 hover:text-text sm:min-h-0"
           >
             Start over
           </button>

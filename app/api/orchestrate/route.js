@@ -7,14 +7,20 @@ import { evaluatePrompt } from "../../../lib/evaluatePrompt";
 import { refinePrompt } from "../../../lib/refinePrompt";
 import { REASONING_MODEL } from "../../../lib/models.mjs";
 import { embedText } from "../../../lib/embeddings.mjs";
+import { MIN_INPUT_LEN, MAX_INPUT_LEN } from "../../../lib/limits.mjs";
+
+// The pipeline (retrieve → draft → judge → optional refine) normally finishes
+// in ~20s but can approach a minute when Together is under load and refinement
+// fires. Without this, Vercel's default ceiling would kill the stream mid-flight
+// and the client would sit on a frozen stepper with no error. 60 is the maximum
+// the Hobby plan allows and is valid on Pro too.
+export const maxDuration = 60;
 
 // ---------------------------------------------------------------------------
 // Input validation constants
 // ---------------------------------------------------------------------------
 
 const ALLOWED_TARGET_MODELS = ["ChatGPT", "Claude", "Gemini", "Grok"];
-const MIN_INPUT_LEN = 3;
-const MAX_INPUT_LEN = 4000;   // ~3000 tokens max — covers any realistic intent
 
 // Tokens/markers that only our system prompt should emit. If a user's raw
 // intent contains any of these, a clever attacker could trick the client-side
