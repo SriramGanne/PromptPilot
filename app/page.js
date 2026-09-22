@@ -71,11 +71,10 @@ export default function Home() {
   const [thinkingContent, setThinkingContent] = useState("");
   const [optimizedPrompt, setOptimizedPrompt] = useState("");
 
-  // Eval Layer V1 is non-streaming: instead of token deltas, the server emits
-  // coarse `stage` events. This holds the current human-readable stage label
-  // (e.g. "Evaluating optimization quality…") shown while we await the final
-  // prompt. Empty string = no active stage.
-  const [loadingStage, setLoadingStage] = useState("");
+  // Stage timeline for the stepper: { stages: { [key]: { start, end } },
+  // active, startedAt, endedAt }. Driven by the server's `stage` events (which
+  // carry a stable `key`), plus `draft`/`done`/`error` to close the last one.
+  const [progress, setProgress] = useState(EMPTY_PROGRESS);
 
   // React 19: async callbacks inside startTransition keep the UI responsive
   // without needing a manual isLoading flag.
@@ -161,7 +160,7 @@ export default function Home() {
                      //                   doesn't flash while we await clarifying
     setThinkingContent("");
     setOptimizedPrompt("");
-    setLoadingStage("");
+    setProgress({ ...EMPTY_PROGRESS, startedAt: Date.now() });
     setCopied(false);
     setJustCompleted(false);
     didAutoScrollRef.current = false; // re-arm auto-scroll for this run
@@ -207,13 +206,28 @@ export default function Home() {
       setOptimizedPrompt(p.prompt);
     };
 
+    // Close whichever stage is active (if any) and optionally open `key`.
+    // The clock is read OUTSIDE the updater: React may re-run updaters when a
+    // transition render restarts, and a Date.now() inside would then collapse
+    // every stage's start/end onto the replay instant (all durations → 0s).
+    const advanceStage = (key) => {
+      const now = Date.now();
+      setProgress((p) => {
+        const stages = { ...p.stages };
+        if (p.active && stages[p.active] && !stages[p.active].end) {
+          stages[p.active] = { ...stages[p.active], end: now };
+        }
+        if (key) stages[key] = { start: now };
+        return { ...p, stages, active: key ?? null, endedAt: key ? null : now };
+      });
+    };
+
     const applyEvent = (ev) => {
       switch (ev.type) {
         case "clarifying":
           setResult(null);
           setThinkingContent("");
           setOptimizedPrompt("");
-          setLoadingStage("");
           setQuestions(ev.questions ?? []);
           setAnswers(new Array(ev.questions?.length ?? 0).fill(""));
           setClarityScore(ev.clarityScore ?? null);
@@ -224,33 +238,38 @@ export default function Home() {
           setResult(ev);
           syncSplitStates(ev.optimizedPrompt ?? "");
           setClarityScore(ev.clarityScore ?? null);
-          setLoadingStage("");
+          advanceStage(null);
           setStep(3);
           break;
         case "stage":
           // Non-streaming progress. Move to step 3 and ensure a result object
           // exists so the result panel renders its loading state — even before
           // the `meta` event populates RAG sources.
-          setLoadingStage(ev.label ?? "");
+          if (ev.key) advanceStage(ev.key);
           setResult((prev) => prev ?? { streaming: true, ragSources: [] });
           setStep(3);
           break;
         case "meta":
-          metaPayload = ev;
           setResult({ ...ev, optimizedPrompt: "", streaming: true });
           setClarityScore(ev.clarityScore ?? null);
           setStep(3);
+          break;
+        case "draft":
+          // V1 is ready; the judge (and maybe refinement) are still running.
+          // Show it now — the user can read and copy while quality is checked.
+          setResult((prev) => ({ ...(prev ?? {}), streaming: true, draft: true }));
+          syncSplitStates(ev.optimizedPrompt ?? "");
           break;
         case "done":
           // The server already selected the final prompt (V1 or refined V2);
           // `optimizedPrompt` carries it for the structured-output parser.
           setResult({ ...ev, streaming: false });
           syncSplitStates(ev.optimizedPrompt ?? ev.finalPrompt ?? "");
-          setLoadingStage("");
+          advanceStage(null);
           break;
         case "error":
           setError(ev.error || "Stream error");
-          setLoadingStage("");
+          advanceStage(null);
           break;
       }
     };
@@ -267,8 +286,10 @@ export default function Home() {
           if (!trimmed) continue;
           try {
             applyEvent(JSON.parse(trimmed));
-          } catch {
-            // malformed line — skip, keep stream alive
+          } catch (err) {
+            // Malformed line or a handler bug — skip it and keep the stream
+            // alive, but say so: a silent drop here once hid every `meta` event.
+            console.warn("[stream] dropped event:", err?.message, trimmed.slice(0, 80));
           }
         }
       }
@@ -333,7 +354,6 @@ export default function Home() {
     setResult(null);
     setThinkingContent("");
     setOptimizedPrompt("");
-    setLoadingStage("");
     setError("");
     setClarityScore(null);
     setClarifyRound(0);
@@ -436,7 +456,7 @@ export default function Home() {
                 justCompleted={justCompleted}
                 thinkingContent={thinkingContent}
                 optimizedPrompt={optimizedPrompt}
-                loadingStage={loadingStage}
+                progress={progress}
                 parsed={parsed}
                 result={result}
                 targetModel={targetModel}
@@ -749,7 +769,7 @@ function StepResult({
   justCompleted,
   thinkingContent,
   optimizedPrompt,
-  loadingStage,
+  progress,
   parsed,
   result,
   targetModel,
@@ -765,9 +785,10 @@ function StepResult({
   const hasReasoning =
     Boolean(thinkingContent) || Boolean(parsed.grounding) || Boolean(parsed.evalPrediction);
 
-  // Loading phase: the server is buffering V1 → judge → optional refinement.
-  // No prompt is shown until `done`; we render a staged skeleton meanwhile.
+  // Skeleton until the draft lands; after that the prompt is visible while
+  // the judge (and optional refinement) finish in the background.
   const loading = streaming && !optimizedPrompt;
+  const checkingQuality = streaming && Boolean(optimizedPrompt);
 
   return (
     <div className="p-6 sm:p-8">
@@ -779,6 +800,11 @@ function StepResult({
             {result?.cacheHit && (
               <span className="ml-2 rounded-md bg-success/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success">
                 Cached
+              </span>
+            )}
+            {result?.refinementSuccessful && (
+              <span className="ml-2 rounded-md bg-success/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success">
+                Refined
               </span>
             )}
           </p>
@@ -833,23 +859,32 @@ function StepResult({
             </svg>
             <span>Improved Prompt</span>
           </div>
-          {/* Eval Layer V1 is non-streaming: nothing is shown until the final
-              prompt lands. While the orchestration runs (optimize → evaluate →
-              refine) we show a shimmer skeleton driven by the server's current
-              stage label, in BOTH Power Mode and standard mode. */}
+          {/* Skeleton until the draft arrives, then the prompt with a slim
+              status line while the quality check runs. If refinement changes
+              the text, `done` swaps it in and the border pulse signals it. */}
           {loading ? (
-            <GeneratingSkeleton label={loadingStage} />
+            <GeneratingSkeleton progress={progress} sourceCount={result?.ragSources?.length ?? 0} />
           ) : (
-            <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-text">
-              {optimizedPrompt}
-              {!optimizedPrompt && !streaming && (
-                <span className="text-text-dim italic">No prompt returned.</span>
+            <>
+              {!result?.cacheHit && (
+                <StageStepper
+                  progress={progress}
+                  sourceCount={result?.ragSources?.length ?? 0}
+                  compact
+                  hint={checkingQuality ? "you can copy this draft now" : null}
+                />
               )}
-            </pre>
+              <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-text">
+                {optimizedPrompt}
+                {!optimizedPrompt && !streaming && (
+                  <span className="text-text-dim italic">No prompt returned.</span>
+                )}
+              </pre>
+            </>
           )}
         </div>
 
-        <ResearchBlueprintFooter sources={result?.ragSources ?? []} />
+        <ResearchBlueprintFooter sources={result?.ragSources ?? []} pending={loading} />
       </div>
     </div>
   );
@@ -928,37 +963,7 @@ function ReasoningDisclosure({ thinking, grounding, evalPrediction, showCursor }
 // staggered opacity via per-bar delay for a wave effect.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function GeneratingSkeleton({ label = "" }) {
-  // Fallback cycle for paths that don't drive an explicit stage label.
-  const PHASES = [
-    "Analysing intent…",
-    "Retrieving research…",
-    "Synthesising prompt…",
-    "Polishing output…",
-  ];
-  const [phase, setPhase] = useState(0);
-  useEffect(() => {
-    // When the server is driving the label, don't run the local cycle.
-    if (label) return;
-    const id = setInterval(() => setPhase((p) => (p + 1) % PHASES.length), 1400);
-    return () => clearInterval(id);
-  }, [label]);
-
-  // Elapsed-time tracker → reassurance affordance. Slow runs (judge + refine
-  // can push past 30s) otherwise look stalled; after a threshold we swap the
-  // caption to an explicit "still working" message so the wait reads as
-  // intentional, not hung.
-  const SLOW_AFTER_SEC = 30;
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setElapsed((s) => s + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
-  const takingLong = elapsed >= SLOW_AFTER_SEC;
-
-  // Server-driven stage label takes precedence over the local fallback cycle.
-  const statusText = label || PHASES[phase];
-
+function GeneratingSkeleton({ progress, sourceCount }) {
   // Bar widths are deliberately irregular so the block reads as prose-like
   // text rather than a table. All bars use `animate-pulse`; staggered
   // `animationDelay` produces a left-to-right shimmer wave.
@@ -968,16 +973,8 @@ function GeneratingSkeleton({ label = "" }) {
   ];
 
   return (
-    <div aria-live="polite" aria-busy="true">
-      <div className="flex items-center gap-2.5 text-[12px] font-medium text-accent-2">
-        <span
-          className="inline-block h-3.5 w-3.5 shrink-0 rounded-full border-2 border-accent-2/30 border-t-accent-2 animate-spin"
-          aria-hidden="true"
-        />
-        <span key={statusText} className="animate-[fadeIn_260ms_ease-out]">
-          {statusText}
-        </span>
-      </div>
+    <div aria-busy="true">
+      <StageStepper progress={progress} sourceCount={sourceCount} />
 
       <div className="mt-4 space-y-2.5">
         {bars.map((w, i) => (
@@ -988,18 +985,140 @@ function GeneratingSkeleton({ label = "" }) {
           />
         ))}
       </div>
-
-      <p
-        className={`mt-4 text-[11px] italic transition-colors ${
-          takingLong ? "text-accent-2 not-italic" : "text-text-dim"
-        }`}
-      >
-        {takingLong
-          ? "Still working — quality checks are taking a little longer than usual. Hang tight, your prompt is on its way."
-          : "Grounding, evaluating, and refining your prompt — this can take up to a minute."}
-      </p>
     </div>
   );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Stage Stepper — replaces the old rotating caption + "still working" apology.
+// One row per pipeline stage with a live elapsed counter on the active one: a
+// ticking number reads as progress even when nothing else on screen changes.
+// `compact` renders a single chip row (used above the draft prompt while the
+// judge runs, and briefly after `done`).
+// ═══════════════════════════════════════════════════════════════════════════
+
+const EMPTY_PROGRESS = { stages: {}, active: null, startedAt: null, endedAt: null };
+
+const STAGE_STEPS = [
+  { key: "retrieving", label: "Finding best practices", slowAfterMs: 15000 },
+  { key: "optimizing", label: "Drafting prompt", slowAfterMs: 30000 },
+  { key: "evaluating", label: "Checking quality", slowAfterMs: 20000 },
+  { key: "refining", label: "Refining", slowAfterMs: 30000, optional: true },
+];
+
+const fmtSecs = (ms) => `${Math.max(0, Math.round(ms / 1000))}s`;
+
+function StageStepper({ progress, sourceCount = 0, compact = false, hint = null }) {
+  const { stages, active, startedAt, endedAt } = progress ?? EMPTY_PROGRESS;
+
+  // 1Hz tick while a stage is active so the elapsed counter moves.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [active]);
+
+  // After completion, keep the compact row visible briefly, then hide it.
+  const finished = Boolean(endedAt) && !active;
+  const [showFinished, setShowFinished] = useState(true);
+  useEffect(() => {
+    if (!finished) { setShowFinished(true); return; }
+    const t = setTimeout(() => setShowFinished(false), 4000);
+    return () => clearTimeout(t);
+  }, [finished, endedAt]);
+  if (finished && !showFinished) return null;
+  if (!active && !finished) return null;
+
+  const rows = STAGE_STEPS.map((step) => {
+    const st = stages[step.key];
+    let state = "pending";
+    if (st?.end) state = "done";
+    else if (st && step.key === active) state = "active";
+    const elapsed = st ? (st.end ?? now) - st.start : 0;
+    const slow = state === "active" && elapsed > step.slowAfterMs;
+    let label = step.label;
+    if (step.key === "retrieving" && state === "done") {
+      label = sourceCount > 0 ? `Found ${sourceCount} best practice${sourceCount === 1 ? "" : "s"}` : "No matching research";
+    }
+    return { ...step, state, elapsed, slow, label };
+  })
+    // The optional refinement step is shown only if it actually started, or
+    // (in the full view) as a dim "if needed" placeholder while running.
+    .filter((r) => !r.optional || r.state !== "pending" || (!compact && !finished));
+
+  if (compact) {
+    return (
+      <div className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px]" aria-live="polite">
+        {rows.map((r) => (
+          <span
+            key={r.key}
+            className={`inline-flex items-center gap-1.5 ${
+              r.state === "active" ? "font-medium text-accent-2" : r.state === "done" ? "text-text-muted" : "text-text-dim"
+            }`}
+          >
+            <StepGlyph state={r.state} />
+            <span>{r.label}</span>
+            {r.state !== "pending" && (
+              <span className="font-mono text-[11px] text-text-dim">{fmtSecs(r.elapsed)}</span>
+            )}
+            {r.slow && <span className="text-[11px] text-text-dim">· taking longer than usual</span>}
+          </span>
+        ))}
+        {finished && startedAt && (
+          <span className="inline-flex items-center gap-1.5 text-success">
+            <StepGlyph state="done" />
+            <span>Ready in {fmtSecs(endedAt - startedAt)}</span>
+          </span>
+        )}
+        {hint && <span className="text-text-dim">— {hint}</span>}
+      </div>
+    );
+  }
+
+  return (
+    <ol className="space-y-2" aria-live="polite">
+      {rows.map((r) => (
+        <li
+          key={r.key}
+          className={`flex items-center gap-2.5 text-[12px] ${
+            r.state === "active" ? "font-medium text-accent-2" : r.state === "done" ? "text-text-muted" : "text-text-dim"
+          }`}
+        >
+          <StepGlyph state={r.state} />
+          <span>{r.label}</span>
+          {r.optional && r.state === "pending" && (
+            <span className="text-[11px] text-text-dim">if needed</span>
+          )}
+          {r.state !== "pending" && (
+            <span className="font-mono text-[11px] text-text-dim">{fmtSecs(r.elapsed)}</span>
+          )}
+          {r.slow && (
+            <span className="text-[11px] text-text-dim">· taking longer than usual — the model may be under load</span>
+          )}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function StepGlyph({ state }) {
+  if (state === "active") {
+    return (
+      <span
+        className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-accent-2/30 border-t-accent-2 animate-spin"
+        aria-hidden="true"
+      />
+    );
+  }
+  if (state === "done") {
+    return (
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-success" aria-hidden="true">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    );
+  }
+  return <span className="inline-block h-3 w-3 shrink-0 rounded-full border-2 border-border-2" aria-hidden="true" />;
 }
 
 function BrainIcon() {
@@ -1034,7 +1153,7 @@ function BrainIcon() {
 // separates it visually from the prompt text above.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ResearchBlueprintFooter({ sources }) {
+function ResearchBlueprintFooter({ sources, pending = false }) {
   return (
     <div className="border-t border-accent/20 bg-accent/[0.04] px-5 py-4">
       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-dim">
@@ -1047,7 +1166,9 @@ function ResearchBlueprintFooter({ sources }) {
 
       {sources.length === 0 ? (
         <div className="mt-2.5 text-[12px] text-text-dim">
-          No research grounded this prompt — relying on built-in best practices.
+          {pending
+            ? "Retrieving research…"
+            : "No research grounded this prompt — relying on built-in best practices."}
         </div>
       ) : (
         <div className="mt-3 flex flex-wrap gap-2">

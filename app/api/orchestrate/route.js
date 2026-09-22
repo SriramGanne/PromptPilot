@@ -98,6 +98,13 @@ const GAP_ANALYSIS_TIMEOUT_MS = 30000;
 const GAP_ANALYSIS_MAX_TOKENS = 2000;
 const SYNTHESIS_MAX_TOKENS = 8000;
 
+// Latency control, not cost control. GLM-5.3-Flash always runs a hidden
+// reasoning pass; at its default ("max") synthesis emitted ~1800 reasoning
+// tokens (30s) on top of the explicit <thinking> section the prompt already
+// asks for — the same reasoning done twice. "low" cut synthesis to ~6s with
+// judge scores unchanged (see commit history for the A/B).
+const REASONING_EFFORT = "low";
+
 // ---------------------------------------------------------------------------
 // Prompt templates
 // ---------------------------------------------------------------------------
@@ -211,6 +218,7 @@ async function analyzeGaps(userInput) {
       ],
       temperature: 0.1,
       max_tokens: GAP_ANALYSIS_MAX_TOKENS,
+      reasoning_effort: REASONING_EFFORT,
     },
     { timeout: GAP_ANALYSIS_TIMEOUT_MS, maxRetries: 1 }
   );
@@ -293,6 +301,7 @@ async function buildRetrievalEmbedding(userInput) {
         ],
         temperature: 0.2,
         max_tokens: RETRIEVAL_QUERY_MAX_TOKENS,
+        reasoning_effort: REASONING_EFFORT,
       },
       { timeout: RETRIEVAL_QUERY_TIMEOUT_MS, maxRetries: 1 }
     );
@@ -437,6 +446,7 @@ function computeFaithfulness(ragChunks, output) {
 //   { type: "cached",  ...fullPayload }
 //   { type: "stage",   key, label }      // lightweight progress label
 //   { type: "meta",    clarityScore, ragSources, originalTokens, targetModel }
+//   { type: "draft",   optimizedPrompt }  // V1, shown while the judge runs
 //   { type: "done",    ...finalMetrics } // after eval + optional refinement
 //   { type: "error",   error }
 //
@@ -524,19 +534,12 @@ export async function POST(request) {
       // re-submission after a clarifying round. Prevents infinite loops
       // and lets users force a generation with whatever detail they have.
       const retrievalEmbeddingPromise = buildRetrievalEmbedding(userInput);
-      let gap, queryEmbedding;
+      const queryEmbeddingPromise = embedQuery(userInput); // never rejects
+      let gap;
       try {
-        [gap, queryEmbedding] = await Promise.all([
-          skipClarification
-            ? Promise.resolve({
-                sufficient: true,
-                clarityScore: 0.7,
-                questions: [],
-                missingDimensions: [],
-              })
-            : analyzeGaps(userInput),
-          embedQuery(userInput),
-        ]);
+        gap = skipClarification
+          ? { sufficient: true, clarityScore: 0.7, questions: [], missingDimensions: [] }
+          : await analyzeGaps(userInput);
       } catch (err) {
         return stageFail(
           "llm",
@@ -559,6 +562,7 @@ export async function POST(request) {
         }
 
         // ── Semantic cache ────────────────────────────────────────────────
+        const queryEmbedding = await queryEmbeddingPromise;
         const cached = queryEmbedding ? await getCachedResult(queryEmbedding, targetModel) : null;
         if (cached) {
           send({ type: "cached", ...cached });
@@ -588,12 +592,13 @@ export async function POST(request) {
         });
 
         // ── Stage 3 — GLM Optimization V1 (non-streaming) ───────────────
-        // Eval Layer V1 buffers the full V1 instead of streaming tokens: the
-        // judge + optional refinement decide the FINAL prompt, so streaming a
-        // V1 we might discard would be misleading. Isolated try/catch so a
-        // Together AI quota/network error surfaces as stage "llm".
-        send({ type: "stage", key: "optimizing", label: "Optimizing prompt…" });
+        // Buffered rather than token-streamed so the shape guard below can
+        // reject malformed output before anything reaches the client.
+        // Isolated try/catch so a Together AI quota/network error surfaces
+        // as stage "llm".
+        send({ type: "stage", key: "optimizing", label: "Drafting your prompt…" });
         let v1Output = "";
+        const synthStartedAt = Date.now();
         try {
           const completion = await together.chat.completions.create(
             {
@@ -604,12 +609,18 @@ export async function POST(request) {
               ],
               temperature: 0.4,
               max_tokens: SYNTHESIS_MAX_TOKENS,
+              reasoning_effort: REASONING_EFFORT,
             },
             // Bound the call: one retry max so a timeout can't be multiplied by
             // the SDK's default 2 retries into a multi-minute hang.
             { timeout: SYNTHESIS_TIMEOUT_MS, maxRetries: 1 }
           );
           v1Output = completion.choices?.[0]?.message?.content ?? "";
+          console.log("[synthesis]", JSON.stringify({
+            latency_ms: Date.now() - synthStartedAt,
+            completion_tokens: completion.usage?.completion_tokens ?? null,
+            reasoning_tokens: completion.usage?.completion_tokens_details?.reasoning_tokens ?? null,
+          }));
         } catch (err) {
           const timedOut =
             err?.name === "APIConnectionTimeoutError" || /timed? ?out/i.test(err?.message ?? "");
@@ -638,10 +649,17 @@ export async function POST(request) {
           return;
         }
 
+        // ── Draft ─────────────────────────────────────────────────────────
+        // Show V1 now rather than after the judge: the judge + refinement
+        // take longer than synthesis itself, and refinement only sometimes
+        // replaces V1. The client renders the draft immediately and swaps in
+        // the final prompt on `done` if it changed.
+        send({ type: "draft", optimizedPrompt: v1Output });
+
         // ── Stage 4 — Judge evaluation (GPT-5-mini) ───────────────────────
         // evaluatePrompt() never throws: on disabled judge, missing key,
         // provider error, or bad JSON it returns { evaluation_failed: true }.
-        send({ type: "stage", key: "evaluating", label: "Evaluating optimization quality…" });
+        send({ type: "stage", key: "evaluating", label: "Checking quality…" });
         const evaluationResult = await evaluatePrompt({
           userIntent: userInput,
           ragChunks,
@@ -660,7 +678,7 @@ export async function POST(request) {
 
         if (!evaluationResult.evaluation_failed && evaluationResult.refinement_required) {
           refinementTriggered = true;
-          send({ type: "stage", key: "refining", label: "Refining output…" });
+          send({ type: "stage", key: "refining", label: "Refining based on quality check…" });
 
           const refineRes = await refinePrompt({
             originalUserIntent: userInput,
