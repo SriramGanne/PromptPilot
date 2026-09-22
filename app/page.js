@@ -704,7 +704,7 @@ function StepIntent({ intentRef, intent, setIntent, targetModel, setTargetModel,
         <button
           type="submit"
           disabled={!intent.trim() || isPending}
-          className="group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-accent to-accent-2 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-8px_rgba(124,58,237,0.6)] transition hover:shadow-[0_12px_32px_-8px_rgba(124,58,237,0.8)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+          className="group relative inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-gradient-to-br from-accent to-accent-2 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-8px_rgba(124,58,237,0.6)] transition hover:shadow-[0_12px_32px_-8px_rgba(124,58,237,0.8)] disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none sm:min-h-0"
         >
           {isPending ? <Spinner /> : null}
           {isPending ? "Analysing intent…" : "Continue →"}
@@ -795,7 +795,7 @@ function StepClarification({
           type="button"
           onClick={onBack}
           disabled={isPending}
-          className="rounded-xl border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-text-muted transition hover:border-border-2 hover:text-text disabled:opacity-40"
+          className="inline-flex min-h-11 items-center rounded-xl border border-border bg-surface-2 px-4 py-2 text-sm font-medium text-text-muted transition hover:border-border-2 hover:text-text disabled:opacity-40 sm:min-h-0"
         >
           ← Back
         </button>
@@ -807,7 +807,7 @@ function StepClarification({
             type="button"
             onClick={onSkip}
             disabled={isPending}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-transparent bg-transparent px-4 py-2.5 text-sm font-medium text-text-dim transition hover:border-border hover:bg-surface-2/60 hover:text-text-muted disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-transparent bg-transparent px-4 py-2.5 text-sm font-medium text-text-dim transition hover:border-border hover:bg-surface-2/60 hover:text-text-muted disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0"
             title="Generate now without answering the questions"
           >
             Skip &amp; Generate with current info
@@ -815,7 +815,7 @@ function StepClarification({
           <button
             type="submit"
             disabled={isPending}
-            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-br from-accent to-accent-2 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-8px_rgba(124,58,237,0.6)] transition hover:shadow-[0_12px_32px_-8px_rgba(124,58,237,0.8)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-gradient-to-br from-accent to-accent-2 px-6 py-2.5 text-sm font-semibold text-white shadow-[0_8px_24px_-8px_rgba(124,58,237,0.6)] transition hover:shadow-[0_12px_32px_-8px_rgba(124,58,237,0.8)] disabled:cursor-not-allowed disabled:opacity-40 sm:min-h-0"
           >
             {isPending ? <Spinner /> : null}
             {isPending ? "Synthesising…" : "Generate prompt →"}
