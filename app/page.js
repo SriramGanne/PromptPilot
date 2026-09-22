@@ -551,7 +551,7 @@ function PowerToggle({ enabled, onChange }) {
       role="switch"
       aria-checked={enabled}
       onClick={() => onChange(!enabled)}
-      className="group flex items-center gap-3 rounded-full border border-border bg-surface-2 px-3 py-1.5 text-sm transition hover:border-accent/50"
+      className="group flex min-h-11 items-center gap-3 rounded-full border border-border bg-surface-2 px-3 py-1.5 text-sm transition hover:border-accent/50 sm:min-h-0"
     >
       <span className="flex items-center gap-1.5 font-medium">
         <svg
