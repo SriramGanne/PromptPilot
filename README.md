@@ -28,7 +28,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 
 ### Evaluator-Optimizer Design Pattern
 PromptPilot doesn't just "guess." It follows a closed-loop system:
-1.  **Ingestion:** RAG retrieval of best practices.
+1.  **Retrieval:** A HyDE-style rewrite turns the user's task into a passage about applicable techniques, which is embedded and matched against the vault — so task language finds technique language.
 2.  **Synthesis:** GLM-5.3-Flash generates the "Improved Prompt."
 3.  **Audit:** Internal regression testing against a G-Eval rubric (Faithfulness, Specificity, Structure).
 

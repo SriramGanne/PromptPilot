@@ -262,12 +262,57 @@ async function embedQuery(text) {
 }
 
 // ---------------------------------------------------------------------------
-// Stage 2b — RAG retrieval (enriched with citation_url)
+// Stage 2b — Retrieval query rewrite (HyDE)
 // ---------------------------------------------------------------------------
 
-// Threshold calibrated for text-embedding-3-small over the seed vault: genuine
-// task→technique matches land at 0.27-0.42, unrelated ones at <=0.22. (The
-// old 0.65 was for e5, whose baseline similarity is ~0.8 for anything.)
+// User intents are TASKS ("write a cover letter") but vault entries describe
+// TECHNIQUES ("Chain-of-Thought"), so embedding the raw intent gives weak,
+// often wrong matches (measured: 0.2-0.4, e.g. cover letter → EmotionPrompt).
+// Instead, have the model write a short hypothetical passage about which
+// techniques suit the task, and embed THAT — technique-language matches
+// technique-language (measured: 0.5-0.7, correct top-3 on every probe).
+//
+// The semantic cache must NOT use this embedding: two different intents that
+// call for the same techniques would cache-hit each other and serve the wrong
+// prompt. The cache keys on the raw-intent embedding; only RAG uses this one.
+const RETRIEVAL_QUERY_SYSTEM = `You are a prompt-engineering librarian. Given a user's task, write ONE short passage (3-5 sentences) describing which prompt-engineering techniques would most improve an AI model's output for that task, and why. Name techniques by their standard research names (for example: Chain-of-Thought, Self-Consistency, Tree of Thoughts, Chain-of-Verification, Chain-of-Density, Few-Shot Prompting, ReAct, Toolformer, Skeleton-of-Thought, Least-to-Most, Step-Back Prompting, Plan-and-Solve, Self-Refine, Reflexion, System Persona Adoption, XML tagging and delimiters, Retrieval-Augmented Generation, Constitutional AI, Meta-Prompting, OPRO, G-Eval). Describe the technique mechanism, not the user's task. Output the passage only — no headings, no lists, no preamble.`;
+
+const RETRIEVAL_QUERY_TIMEOUT_MS = 30000;
+const RETRIEVAL_QUERY_MAX_TOKENS = 2000;
+
+// Never throws: on any failure resolves to null and the caller falls back to
+// the raw-intent embedding, so retrieval degrades rather than disappears.
+async function buildRetrievalEmbedding(userInput) {
+  try {
+    const response = await together.chat.completions.create(
+      {
+        model: REASONING_MODEL,
+        messages: [
+          { role: "system", content: RETRIEVAL_QUERY_SYSTEM },
+          { role: "user", content: userInput },
+        ],
+        temperature: 0.2,
+        max_tokens: RETRIEVAL_QUERY_MAX_TOKENS,
+      },
+      { timeout: RETRIEVAL_QUERY_TIMEOUT_MS, maxRetries: 1 }
+    );
+    const passage = response.choices?.[0]?.message?.content?.trim();
+    if (!passage) return null;
+    return await embedText(passage);
+  } catch (err) {
+    console.warn("[generate] retrieval query rewrite failed — falling back to intent embedding:", err?.message);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Stage 2c — RAG retrieval (enriched with citation_url)
+// ---------------------------------------------------------------------------
+
+// Floor calibrated for text-embedding-3-small. With the HyDE rewrite above,
+// genuine matches land at 0.5-0.7; on the raw-intent fallback path they land
+// at 0.27-0.42 with noise at <=0.22. (The old 0.65 was for e5, whose baseline
+// similarity is ~0.8 for anything.)
 const RAG_MATCH_THRESHOLD = 0.25;
 
 async function retrieveContext(embedding) {
@@ -468,16 +513,17 @@ export async function POST(request) {
         controller.close();
       };
 
-      // ── Parallel: gap analysis + query embedding ──────────────────────
-      // Gap analysis decides whether we even synthesize. The embedding
-      // is needed for BOTH the semantic cache lookup and RAG retrieval.
-      // Running them concurrently saves ~150–300ms on the happy path.
-      // If the gap returns "insufficient", we discard the unused embedding.
+      // ── Parallel: gap analysis + intent embedding + retrieval rewrite ──
+      // Gap analysis decides whether we even synthesize. The intent
+      // embedding feeds the semantic cache. The retrieval rewrite (HyDE)
+      // takes several seconds, so it is STARTED here but only awaited right
+      // before RAG — the clarification path and cache hits never wait on it.
       //
       // skipClarification bypasses gap analysis entirely — used when the
       // user clicks "Skip & Generate" on the clarification step, or on any
       // re-submission after a clarifying round. Prevents infinite loops
       // and lets users force a generation with whatever detail they have.
+      const retrievalEmbeddingPromise = buildRetrievalEmbedding(userInput);
       let gap, queryEmbedding;
       try {
         [gap, queryEmbedding] = await Promise.all([
@@ -522,7 +568,8 @@ export async function POST(request) {
 
         // ── Stage 2b — RAG retrieval ──────────────────────────────────────
         send({ type: "stage", key: "retrieving", label: "Retrieving prompting techniques…" });
-        const ragChunks = queryEmbedding ? await retrieveContext(queryEmbedding) : [];
+        const retrievalEmbedding = (await retrievalEmbeddingPromise) ?? queryEmbedding;
+        const ragChunks = retrievalEmbedding ? await retrieveContext(retrievalEmbedding) : [];
         const originalTokens = estimateTokens(userInput);
 
         const ragSources = ragChunks.map((c) => ({
