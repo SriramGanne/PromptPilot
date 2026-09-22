@@ -29,8 +29,9 @@
  * Required env (.env.local): TOGETHER_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import {
   runCuration,
@@ -90,6 +91,10 @@ async function collectCandidates(args) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   const ingest = Boolean(args.ingest);
+  const reviewedCatalogue = fileURLToPath(new URL("../data/vault/active_existing.json", import.meta.url));
+  if (ingest && existsSync(reviewedCatalogue)) {
+    throw new Error("Legacy curator ingestion is disabled because data/vault is authoritative. Keep this command in dry-run mode; review candidates in data/vault and use scripts/vault_maintenance.mjs to apply them.");
+  }
   const minScore = args["min-score"] ? Number(args["min-score"]) : DEFAULT_MIN_SCORE;
   const simThreshold = args.sim ? Number(args.sim) : DEFAULT_SIM_THRESHOLD;
 
@@ -111,7 +116,7 @@ async function main() {
   console.log("\n" + formatReport(report));
 
   if (!ingest && report.accepted.length) {
-    console.log(`\nThis was a DRY RUN. Re-run with --ingest to write the ${report.accepted.length} accepted entr${report.accepted.length === 1 ? "y" : "ies"}.`);
+    console.log(`\nThis was a DRY RUN. Review the ${report.accepted.length} accepted candidate(s) in data/vault, then use scripts/vault_maintenance.mjs for approved changes.`);
   }
 }
 

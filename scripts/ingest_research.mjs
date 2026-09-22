@@ -21,8 +21,9 @@
  *   SUPABASE_SERVICE_ROLE_KEY
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClient } from "@supabase/supabase-js";
 import { embedText } from "../lib/embeddings.mjs";
 
@@ -156,6 +157,12 @@ async function insertBatch(supabase, rows) {
 // ---------------------------------------------------------------------------
 
 async function main() {
+  // This legacy seed contains old names/citations. Its title-only upsert path
+  // can resurrect renamed cards and overwrite corrected metadata.
+  const reviewedCatalogue = fileURLToPath(new URL("../data/vault/active_existing.json", import.meta.url));
+  if (existsSync(reviewedCatalogue)) {
+    throw new Error("Legacy seed ingestion is disabled because data/vault is authoritative. Use scripts/vault_maintenance.mjs plan, embed, verify and apply for reviewed changes.");
+  }
   const filePath = resolve(process.argv[2] ?? DEFAULT_SEED_PATH);
   const { supabase } = buildClients();
 

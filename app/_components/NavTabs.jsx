@@ -33,7 +33,7 @@ export default function NavTabs() {
             key={t.href}
             href={t.href}
             aria-current={active ? "page" : undefined}
-            className={`rounded-full px-3.5 py-1.5 text-[13px] font-medium transition ${
+            className={`inline-flex min-h-11 items-center rounded-full px-3.5 py-1.5 text-[13px] font-medium transition sm:min-h-0 ${
               active
                 ? "bg-accent text-white shadow-[0_4px_14px_-4px_rgba(124,58,237,0.6)]"
                 : "text-text-muted hover:text-text"

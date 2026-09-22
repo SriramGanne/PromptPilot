@@ -29,6 +29,10 @@ export default async function VaultPage() {
       .from("prompt_research")
       .select("id, title, summary, best_for, citation_url, category")
       .eq("is_featured", true)
+      // Archived, merged, watch and reference-only records must never be
+      // presented as active core guidance. Fail closed without lifecycle data.
+      .eq("status", "active")
+      .eq("retrieval_enabled", true)
       .order("category", { ascending: true })
       .order("title", { ascending: true });
 

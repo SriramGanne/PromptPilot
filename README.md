@@ -10,7 +10,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 
 ## ✨ Key Product Features
 * **Agentic Interviewer:** Uses a "Gap Analysis" logic to identify missing variables (Context, Persona, Format) and asks targeted follow-up questions before generating.
-* **Knowledge Vault (RAG):** A curated library of 2026 prompt engineering research. Every prompt is grounded in techniques like *Chain-of-Thought*, *Chain-of-Density*, and *Self-Consistency*.
+* **Knowledge Vault (RAG):** A curated, versioned collection spanning foundational and current prompt-engineering research — from *Chain-of-Thought* (2022) through automatic prompt optimization (*MIPRO*, *TextGrad*, *GEPA*). Records carry lifecycle state, so superseded or model-dependent techniques are archived with their provenance rather than deleted, and never reach retrieval.
 * **Asymmetric Reasoning:** Powered by **GLM-5.3-Flash**, a 320B-parameter Mixture-of-Experts model (18B active) delivering high-density logic at low latency.
 * **Power Mode:** Provides a transparent "Reasoning Trace" (`<thinking>` tags), showing the user exactly how the AI interpreted their request.
 * **Model-Aware Optimization:** Tailors output structure specifically for the target model (ChatGPT, Claude, Gemini, or Grok).
@@ -31,7 +31,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 
 ### Evaluator-Optimizer Design Pattern
 PromptPilot doesn't just "guess." It follows a closed-loop system:
-1.  **Retrieval:** A HyDE-style rewrite turns the user's task into a passage about applicable techniques, which is embedded and matched against the vault — so task language finds technique language.
+1.  **Retrieval:** A HyDE-style rewrite supplies the semantic signal. Hybrid retrieval combines cosine similarity with BM25F lexical evidence from the original user intent across the active vault, then selects three sources with a preference for category variety. This distinguishes similar optimization papers without relying on the rewrite to preserve every clue.
 2.  **Gap Analysis:** Scores the intent's clarity and, when it is too vague, asks up to three targeted follow-up questions instead of guessing.
 3.  **Synthesis:** GLM-5.3-Flash generates the "Improved Prompt" (V1), which is streamed to the user as a draft.
 4.  **Audit:** `gpt-5-mini` grades V1 on five 0–10 metrics (intent fidelity, technique use, constraint adherence, task success, output quality) plus a 0–100 composite.
@@ -84,10 +84,12 @@ run to run, so these are ranges rather than guarantees.
     UPSTASH_REDIS_REST_URL=your_url
     UPSTASH_REDIS_REST_TOKEN=your_token
     ```
-3.  **Seed the Vault:**
-    ```bash
-    node --env-file=.env.local scripts/ingest_research.mjs
-    ```
+3.  **Connect the reviewed Vault:**
+    Use the existing PromptPilot database with the lifecycle migrations in
+    `db/migrations/`. Follow [Vault maintenance](docs/vault-maintenance.md) for
+    reviewed updates. The current curation manifests target existing UUIDs;
+    they are not an empty-database bootstrap. Legacy seed ingestion is disabled
+    to prevent old citations and retired records from being restored.
 4.  **Launch:**
     ```bash
     npm run dev
@@ -106,7 +108,9 @@ run to run, so these are ranges rather than guarantees.
   `DEFAULT_SIM_THRESHOLD` (`lib/researchCurator.mjs`) before swapping models.
 * **Changing the reasoning model.** `REASONING_MODEL` in `lib/models.mjs` is the single source
   for gap analysis, synthesis, and refinement.
-* **Testing:** `npm test` runs the eval-metrics unit tests.
+* **Testing:** `npm test` runs evaluation, curation, maintenance and hybrid-retrieval
+  regressions. `npm run build` checks the production build. Read-only live retrieval
+  probes and the safe curation workflow are documented in [Vault maintenance](docs/vault-maintenance.md).
 
 ---
 

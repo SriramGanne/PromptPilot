@@ -1,0 +1,514 @@
+{
+  "$schema_version": "1.0.0",
+  "_doc": [
+    "New ACTIVE records added by the 2026-09 curation review.",
+    "",
+    "Every record here was verified against its primary source on 2026-09-22.",
+    "Where the commonly used method acronym is NOT the published paper title",
+    "(PE2, MIPRO, SAMMO, TextGrad, UniPrompt, GEPA, MePO, TRAS, GMPO, ReASearch),",
+    "the published title is stored in `title` and the acronym in `aliases`.",
+    "Citing by acronym alone produces an unfindable reference.",
+    "",
+    "All inserts require an embedding; the planner refuses an insert without one."
+  ],
+  "reviewed_at": "2026-09-22",
+  "records": [
+    {
+      "key": "pe2",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2024.findings-acl.21 verified 2026-09-22.",
+      "set": {
+        "title": "Prompt Engineering a Prompt Engineer (PE2)",
+        "category": "Optimization",
+        "content": "PE2 improves the meta-prompt that drives an automatic prompt optimizer, rather than the task prompt directly. The insight is that an optimizer LLM asked simply to 'write a better prompt' performs worse than one given a detailed task description, explicit specification of the context it is operating in, and a structured reasoning template describing how to inspect failures and propose an edit. Ye et al. reported gains over prior meta-prompt baselines, including +6.3 points on MultiArith and +3.1 on GSM8K, plus +6.9 on counterfactual tasks. The transferable lesson for anyone building an optimizer loop is that the optimizer's own instructions deserve the same engineering effort as the prompts it produces: specify the task, the evaluation signal and the edit procedure explicitly instead of relying on the model to infer them. The reported gains are benchmark-specific and measured against particular optimizer baselines, so treat them as evidence that meta-prompt quality matters, not as a portable improvement figure.",
+        "summary": "Improves the optimizer's own meta-prompt with detailed task description, context specification and structured reasoning guidance.",
+        "best_for": "Building or debugging an automatic prompt-optimization loop whose optimizer produces weak edits.",
+        "limitations": "Reported gains are benchmark-specific and relative to particular optimizer baselines. Improves the optimizer, not the end task directly — requires an optimization loop to already exist.",
+        "citation_url": "https://aclanthology.org/2024.findings-acl.21/",
+        "canonical_id": "acl:2024.findings-acl.21",
+        "doi": "10.18653/v1/2024.findings-acl.21",
+        "venue": "Findings of the ACL: ACL 2024",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Qinyuan Ye, Mohamed Ahmed, Reid Pryzant, Fereshte Khani",
+        "publication_date": "2024-08-01",
+        "aliases": [
+          "PE2",
+          "prompt engineering a prompt engineer",
+          "meta-prompt optimization"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "mipro",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2024.emnlp-main.525 verified 2026-09-22.",
+      "set": {
+        "title": "Optimizing Instructions and Demonstrations for Multi-Stage Language Model Programs (MIPRO)",
+        "category": "Optimization",
+        "content": "MIPRO optimizes a multi-stage LM program — a pipeline where several model calls feed one another — by jointly searching over both the instructions and the few-shot demonstrations at each stage. The difficulty it addresses is credit assignment: intermediate stages usually have no labels, so there is no direct signal for what a middle step should have done. MIPRO works around this with program-aware instruction proposal, surrogate modelling of the search space, and meta-optimization, using only end-to-end task metrics. Opsahl-Ong et al. evaluated seven multi-stage programs with Llama-3-8B, reporting gains up to 13 accuracy points, with the best configuration winning on five of the seven — so improvement was substantial but not universal even within the evaluation. Practically, it needs a working evaluation metric and a program structured into explicit stages; it is not applicable to a single free-form prompt. Optimizing demonstrations jointly with instructions is the part most often skipped by hand-tuning and is where much of the gain sits.",
+        "summary": "Jointly optimizes instructions and demonstrations across the stages of a multi-call LM program using only end-to-end metrics.",
+        "best_for": "Multi-stage LM pipelines with an end-to-end metric but no intermediate labels.",
+        "limitations": "Requires a staged program and an evaluation dataset — not applicable to a single prompt. Gains held on 5 of 7 evaluated programs with Llama-3-8B; not a uniform or multi-model result.",
+        "citation_url": "https://aclanthology.org/2024.emnlp-main.525/",
+        "canonical_id": "acl:2024.emnlp-main.525",
+        "doi": "10.18653/v1/2024.emnlp-main.525",
+        "venue": "EMNLP 2024 Main Conference",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Krista Opsahl-Ong, Michael J. Ryan, Josh Purtell, et al.",
+        "publication_date": "2024-11-01",
+        "aliases": [
+          "MIPRO",
+          "MIPROv2",
+          "multi-stage prompt optimization",
+          "DSPy optimizer"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": true
+      }
+    },
+    {
+      "key": "sammo",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2024.findings-emnlp.37 verified 2026-09-22.",
+      "set": {
+        "title": "Symbolic Prompt Program Search (SAMMO)",
+        "category": "Optimization",
+        "content": "SAMMO treats a prompt as a structured program rather than a string. Sections, examples, formatting and sub-instructions become nodes in an explicit symbolic representation, which lets an optimizer apply structural transformations — reordering sections, changing how examples are rendered, removing or compressing parts — instead of only rewriting wording. Because the structure is explicit, the search happens at compile time and yields a reusable program rather than a one-off string. Schnabel and Neville evaluated it across three task families: instruction tuning, RAG-pipeline tuning and prompt compression, using multiple LLMs. This is optimizer infrastructure, not a conversational technique: it is worth reaching for when prompts are long, assembled from components and reused at scale, where structural choices carry as much weight as phrasing. For a single hand-written prompt used occasionally, the setup cost will not pay back.",
+        "summary": "Represents prompts as symbolic programs so structural transformations, not just rewording, can be searched at compile time.",
+        "best_for": "Long, component-assembled prompts reused at scale, where structure matters as much as wording.",
+        "limitations": "A compile-time optimizer requiring program representation and an evaluation setup — not an ordinary conversational prompting technique. Specific models and datasets were not verifiable from the landing page.",
+        "citation_url": "https://aclanthology.org/2024.findings-emnlp.37/",
+        "canonical_id": "acl:2024.findings-emnlp.37",
+        "doi": "10.18653/v1/2024.findings-emnlp.37",
+        "venue": "Findings of the ACL: EMNLP 2024",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Tobias Schnabel, Jennifer Neville",
+        "publication_date": "2024-11-01",
+        "aliases": [
+          "SAMMO",
+          "symbolic prompt program search",
+          "structure-aware prompt optimization"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "promptwizard",
+      "action": "INSERT",
+      "verified_source": "arXiv:2405.18369 verified 2026-09-22. Preprint / Microsoft tech report MSR-TR-03; no peer-reviewed version located.",
+      "set": {
+        "title": "PromptWizard: Task-Aware Prompt Optimization Framework",
+        "category": "Optimization",
+        "content": "PromptWizard runs a feedback-driven loop that refines the instruction and its in-context examples together rather than separately. Candidate instructions are generated and critiqued, the critique informs the next revision, and examples are synthesised and selected alongside the wording so the two stay consistent — a mismatch between an instruction and its examples is a common failure of hand-tuning. Agarwal et al. report evaluation across 45 tasks, including settings with limited training data and smaller models, and claim substantially lower token and API cost than earlier optimizers. Two caveats belong on this card. It is a preprint and Microsoft tech report, not peer-reviewed work, and the specific benchmarks and models behind the 45-task figure were not verifiable from the abstract. It also appears as a baseline that later peer-reviewed optimizers report beating, so it is best treated as a practical open-source framework and a reference point rather than a current state-of-the-art claim.",
+        "summary": "Feedback-driven loop that jointly refines instructions and in-context examples with critique and synthesis.",
+        "best_for": "A practical open-source starting point for task-aware prompt optimization with limited data.",
+        "limitations": "Preprint / vendor tech report, not peer-reviewed. The 45-task claim could not be resolved to specific benchmarks or models. Later peer-reviewed optimizers report outperforming it.",
+        "citation_url": "https://arxiv.org/abs/2405.18369",
+        "canonical_id": "arxiv:2405.18369",
+        "arxiv_id": "2405.18369",
+        "venue": "arXiv preprint (Microsoft tech report MSR-TR-03)",
+        "source_type": "preprint",
+        "evidence_status": "preprint",
+        "authors": "Eshaan Agarwal, Joykirat Singh, Vivek Dani, et al.",
+        "publication_date": "2024-05-28",
+        "aliases": [
+          "PromptWizard",
+          "task-aware prompt optimization"
+        ],
+        "related_citations": [
+          {
+            "label": "Microsoft Research announcement (vendor)",
+            "url": "https://www.microsoft.com/en-us/research/blog/promptwizard-the-future-of-prompt-optimization-through-feedback-driven-self-evolving-prompts/",
+            "canonical_id": "vendor:msr-promptwizard",
+            "note": "Vendor blog, 2024-12-17. All performance figures are Microsoft's own, self-evaluated. Not independently replicated."
+          }
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "textgrad",
+      "action": "INSERT",
+      "verified_source": "Nature 639(8055):609-616 (2025), DOI 10.1038/s41586-025-08661-4, verified 2026-09-22 via Crossref/PubMed 40108317. Nature page is auth-walled to automated fetch.",
+      "set": {
+        "title": "Optimizing generative AI by backpropagating language model feedback (TextGrad)",
+        "category": "Advanced",
+        "content": "TextGrad applies the shape of backpropagation to systems whose components are text. An LLM critiques the final output in natural language, and that critique is propagated backwards through the compound system so each component — a prompt, a code fragment, an intermediate output — receives targeted feedback about how it contributed to the end result, then is revised. The word 'gradient' is an analogy: these are natural-language critiques routed through a computation graph, not numerical derivatives, and nothing is differentiated. Yuksekgonul et al. demonstrated it across several domains including PhD-level science question answering, radiotherapy treatment-plan optimization, molecule design, coding and agentic-system optimization, published in Nature. The practical requirements are a system decomposed into addressable components, a way to evaluate the final output, and an iteration budget — each round costs critique and revision calls at every component. It is a framework for optimizing compound AI systems, not a single-prompt trick.",
+        "summary": "Propagates natural-language critique backwards through a compound AI system so each component is revised against its contribution.",
+        "best_for": "Optimizing multi-component AI systems where a final-output evaluation exists and components are individually addressable.",
+        "limitations": "System-level optimization requiring decomposable components, an evaluation loop and an iteration budget — not a one-line prompt technique. 'Gradients' are natural-language critiques, not numerical derivatives. Per-benchmark specifics were not verifiable (paywalled full text).",
+        "citation_url": "https://www.nature.com/articles/s41586-025-08661-4",
+        "canonical_id": "doi:10.1038/s41586-025-08661-4",
+        "doi": "10.1038/s41586-025-08661-4",
+        "venue": "Nature, vol. 639 no. 8055, pp. 609-616",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Mert Yuksekgonul, Federico Bianchi, Joseph Boen, et al.",
+        "publication_date": "2025-03-19",
+        "aliases": [
+          "TextGrad",
+          "textual gradients",
+          "textual backpropagation"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": true
+      }
+    },
+    {
+      "key": "good-prompt-taxonomy",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2025.acl-long.292 verified 2026-09-22.",
+      "set": {
+        "title": "What Makes a Good Natural Language Prompt?",
+        "category": "Structure",
+        "content": "This is a meta-analysis rather than a technique. Do Xuan Long et al. surveyed more than 150 prompting papers published between 2022 and 2024 and distilled the properties those papers actually manipulate into a framework of 21 properties grouped across six dimensions, giving a shared vocabulary for what a prompt is doing — specifying a role, constraining format, supplying context, decomposing a task, and so on. A small accompanying empirical study of multi-property prompt enhancement on reasoning tasks found that enhancing a single well-chosen property often helped more than stacking several at once, which is a useful corrective to the habit of adding every recommended element to one prompt. Use this as a checklist and a diagnostic framework when deciding what to vary, not as evidence that any individual property reliably improves results — it is a survey of what the literature does, and no property here should be presented as universally beneficial.",
+        "summary": "Evidence-backed taxonomy of 21 prompt properties across 6 dimensions, distilled from 150+ papers.",
+        "best_for": "A shared vocabulary and diagnostic checklist for deciding which aspect of a prompt to vary.",
+        "limitations": "A survey and taxonomy, not head-to-head optimizer evidence. No individual property is established as universally beneficial; the accompanying empirical study is small and reasoning-focused.",
+        "citation_url": "https://aclanthology.org/2025.acl-long.292/",
+        "canonical_id": "acl:2025.acl-long.292",
+        "doi": "10.18653/v1/2025.acl-long.292",
+        "venue": "ACL 2025 Main Conference (Long Papers)",
+        "source_type": "survey",
+        "evidence_status": "peer_reviewed",
+        "authors": "Do Xuan Long, Duy Dinh, Ngoc-Hai Nguyen, et al.",
+        "publication_date": "2025-07-01",
+        "aliases": [
+          "prompt property taxonomy",
+          "what makes a good prompt",
+          "prompt dimensions"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": true
+      }
+    },
+    {
+      "key": "uniprompt",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2025.findings-acl.1206 verified 2026-09-22.",
+      "set": {
+        "title": "Task Facet Learning: A Structured Approach to Prompt Optimization (UniPrompt)",
+        "category": "Optimization",
+        "content": "UniPrompt starts from the observation that a task usually has several distinct facets — different input types, edge cases and sub-behaviours — and that a single monolithic instruction tends to serve some well and others badly. It clusters the input space into batches likely to correspond to different facets, then proposes section-level edits to the prompt: adding a new section to cover an uncovered facet, editing an existing one, or deleting a section that is not earning its place. Because edits are structural and localised rather than whole-prompt rewrites, the resulting instruction accumulates coverage instead of oscillating between phrasings. Juneja et al. report beating human-tuned prompts and prior optimization methods on multiple datasets and a real-world task; the specific datasets and models were not resolvable from the landing page. It requires a corpus of examples to cluster, and the section-accumulating design naturally lengthens prompts — worth watching against context budget.",
+        "summary": "Clusters examples into task facets, then adds, edits or deletes semantic prompt sections to cover them.",
+        "best_for": "Tasks with several distinct sub-behaviours or edge cases that one monolithic instruction serves unevenly.",
+        "limitations": "Requires a corpus of examples to cluster. Section-accumulating edits lengthen prompts, consuming context budget. Specific datasets and models were not verifiable from the landing page.",
+        "citation_url": "https://aclanthology.org/2025.findings-acl.1206/",
+        "canonical_id": "acl:2025.findings-acl.1206",
+        "doi": "10.18653/v1/2025.findings-acl.1206",
+        "venue": "Findings of the ACL: ACL 2025",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Gurusha Juneja, Gautam Jajoo, Hua Li, et al.",
+        "publication_date": "2025-07-01",
+        "aliases": [
+          "UniPrompt",
+          "task facet learning",
+          "facet-based prompt optimization"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "capo-cost-aware",
+      "action": "INSERT",
+      "verified_source": "PMLR v293 zehle25a verified 2026-09-22 (AutoML 2025, pp. 18/1-45; preprint arXiv:2504.16005). Name collision with arXiv:2608.16068 (Constraint-Aware CAPO) and arXiv:2605.18869 (MO-CAPO) explicitly disambiguated.",
+      "set": {
+        "title": "CAPO: Cost-Aware Prompt Optimization",
+        "category": "Optimization",
+        "content": "CAPO makes the cost of optimization a first-class objective rather than an afterthought. Built on evolutionary search with an LLM as the mutation operator, it adds racing — abandoning clearly losing candidates early instead of evaluating every candidate on the full set — and treats prompt length as a penalty, so shorter prompts are preferred where accuracy is comparable. Instructions and few-shot examples are optimized together. Zehle et al. evaluated fifteen combinations: five datasets (SST-5, AG News, Subj, GSM8K, COPA) across three open-weight models (Llama-3.3-70B, Qwen2.5-32B, Mistral-Small-24B), against EvoPromptGA, OPRO and PromptWizard. CAPO won in eleven of the fifteen, with the largest margin around 21 points on Llama-3.3-70B/GSM8K — but gains were small on SST-5 and AG News, so 21 points is the ceiling, not the typical case. Note the acronym collision: this is the cost-aware CAPO from AutoML 2025, distinct from the constraint-aware CAPO preprint and from MO-CAPO.",
+        "summary": "Evolutionary prompt optimization with racing and length penalties, optimizing instructions and examples jointly under a cost budget.",
+        "best_for": "Prompt optimization where evaluation budget or prompt length is a real constraint.",
+        "limitations": "Evaluated on 3 classification, 1 math and 1 commonsense dataset with open-weight models only. Gains were small on SST-5 and AG News; the +21 point figure is a best case. Name collides with two unrelated CAPO papers.",
+        "citation_url": "https://proceedings.mlr.press/v293/zehle25a.html",
+        "canonical_id": "pmlr:v293-zehle25a",
+        "arxiv_id": "2504.16005",
+        "venue": "AutoML 2025 (PMLR vol. 293, pp. 18/1-45)",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Tom Zehle, Moritz Schlager, Timo Heiß, Matthias Feurer",
+        "publication_date": "2025-04-22",
+        "aliases": [
+          "CAPO",
+          "cost-aware prompt optimization",
+          "CAPO AutoML 2025"
+        ],
+        "related_citations": [
+          {
+            "label": "DISAMBIGUATION — CAPO: Constraint-Aware Prompt Optimization for LLM Agents",
+            "url": "https://arxiv.org/abs/2608.16068",
+            "canonical_id": "arxiv:2608.16068",
+            "note": "A DIFFERENT paper by different authors on constrained agent system prompts. Not this record. Kept on the watchlist."
+          }
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": true
+      }
+    },
+    {
+      "key": "pmpo",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2025.findings-emnlp.795 verified 2026-09-22 (pp. 14728-14761).",
+      "set": {
+        "title": "PMPO: Probabilistic Metric Prompt Optimization for Small and Large Language Models",
+        "category": "Optimization",
+        "content": "PMPO replaces sampled-output scoring with a probabilistic signal taken directly from the model. Rather than generating completions and grading them, it measures token-level cross-entropy over the expected output, which gives a continuous selection signal from a single forward pass instead of a noisy score from repeated generation. Masking analysis localises which prompt segments carry the loss, so edits can target the weak part of a prompt rather than rewriting the whole thing. Zhao et al. evaluated it on BBH, GSM8K, AQuA-RAT and AlpacaEval 2.0 across several model sizes. The hard constraint is access: this requires logits or loss values, which commercial chat APIs returning text only do not expose. It is therefore applicable to self-hosted or open-weight deployments and not to a typical closed API integration — worth recording explicitly, because the technique is attractive on paper and then impossible to apply in many production setups.",
+        "summary": "Uses token-level cross-entropy from a single forward pass as the optimization signal, with masking to localise weak prompt segments.",
+        "best_for": "Self-hosted or open-weight deployments where logits are available and sampling-based scoring is too noisy or costly.",
+        "limitations": "Requires logit/loss access — not usable through closed text-only APIs. Needs labelled or preference evaluation data.",
+        "citation_url": "https://aclanthology.org/2025.findings-emnlp.795/",
+        "canonical_id": "acl:2025.findings-emnlp.795",
+        "doi": "10.18653/v1/2025.findings-emnlp.795",
+        "venue": "Findings of the ACL: EMNLP 2025",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "ChenZhuo Zhao, Ziqian Liu, Xinda Wang, et al.",
+        "publication_date": "2025-11-01",
+        "aliases": [
+          "PMPO",
+          "probabilistic metric prompt optimization"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "spo",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2025.findings-emnlp.479 verified 2026-09-22.",
+      "set": {
+        "title": "Self-Supervised Prompt Optimization",
+        "category": "Optimization",
+        "content": "Self-Supervised Prompt Optimization removes the dependency on ground-truth labels. Instead of scoring an output against a reference answer, it generates outputs from competing prompts and has an LLM evaluator compare them pairwise; the preference signal from those comparisons drives an optimizer model to rewrite the prompt. Because the signal comes from relative comparison rather than absolute correctness, it works on open-ended tasks where no reference output exists — the case where most optimizers simply cannot be applied. Xiang et al. report competitive results at roughly 1.1 to 5.6 percent of the cost of prior methods, with as few as three samples needed. The inherited weakness is the evaluator: pairwise LLM judgement carries known biases, including position effects and a preference for model-generated text, so the optimizer can converge on prompts that please the judge rather than the user. Where ground truth does exist, a labelled metric remains the stronger signal.",
+        "summary": "Derives optimization signal from pairwise LLM comparison of competing outputs, requiring no reference answers.",
+        "best_for": "Open-ended tasks with no ground-truth references, where labelled scoring is impossible.",
+        "limitations": "Inherits LLM-judge bias, including position effects and preference for model-generated text — can optimize toward the judge rather than the user. Requires several model calls per iteration. Where labels exist, a labelled metric is a stronger signal.",
+        "citation_url": "https://aclanthology.org/2025.findings-emnlp.479/",
+        "canonical_id": "acl:2025.findings-emnlp.479",
+        "doi": "10.18653/v1/2025.findings-emnlp.479",
+        "venue": "Findings of the ACL: EMNLP 2025",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Jinyu Xiang, Jiayi Zhang, Zhaoyang Yu, et al.",
+        "publication_date": "2025-11-01",
+        "aliases": [
+          "SPO",
+          "self-supervised prompt optimization",
+          "label-free prompt optimization"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": true
+      }
+    },
+    {
+      "key": "gepa",
+      "action": "INSERT",
+      "verified_source": "OpenReview RQm2KQTM5r verified 2026-09-22 — ICLR 2026 Oral. arXiv:2507.19457 is the preprint. VISTA limitation from aclanthology 2026.acl-srw.8.",
+      "set": {
+        "title": "GEPA: Reflective Prompt Evolution Can Outperform Reinforcement Learning",
+        "category": "Optimization",
+        "content": "GEPA optimizes prompts by reflecting on execution traces in natural language rather than by gradient updates. It samples system trajectories — reasoning steps, tool calls, tool outputs — reflects on what went wrong in words, proposes prompt edits, and selects survivors with a Genetic-Pareto criterion that maintains a frontier of candidates good at different things instead of collapsing to a single average-best prompt. Agrawal et al. report beating GRPO by roughly 10 percent on average while using up to 35 times fewer rollouts, and beating MIPROv2 by more than 10 percent across two LLMs. The efficiency claim is the interesting part: reflection extracts more signal per rollout than a scalar reward does. Two practical requirements: a system that can capture traces, and a scored task set. One documented failure mode matters — with a defective seed prompt, reflective evolution can degrade rather than improve, with GSM8K accuracy reported falling from 23.81 to 13.50 percent in a follow-up study, so seed quality and a restart strategy are not optional.",
+        "summary": "Evolves prompts by reflecting on execution traces in natural language, with Genetic-Pareto candidate selection.",
+        "best_for": "Compound or agentic systems where traces can be captured and a scored task set exists.",
+        "limitations": "Requires trace capture, a scored task set and multiple model calls per iteration. Documented failure mode: a defective seed prompt can make reflective evolution degrade accuracy (GSM8K 23.81% to 13.50% in a follow-up study) — seed quality and restart strategy matter.",
+        "citation_url": "https://openreview.net/forum?id=RQm2KQTM5r",
+        "canonical_id": "openreview:RQm2KQTM5r",
+        "arxiv_id": "2507.19457",
+        "venue": "ICLR 2026 (Oral)",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Lakshya A Agrawal, Shangyin Tan, Dilara Soylu, et al.",
+        "publication_date": "2025-07-25",
+        "aliases": [
+          "GEPA",
+          "reflective prompt evolution",
+          "Genetic-Pareto prompt evolution"
+        ],
+        "related_citations": [
+          {
+            "label": "Reflection in the Dark: Exposing and Escaping the Black Box in Reflective Prompt Optimization (VISTA)",
+            "url": "https://aclanthology.org/2026.acl-srw.8/",
+            "canonical_id": "acl:2026.acl-srw.8",
+            "note": "Liu et al., ACL 2026 Student Research Workshop. Source of the defective-seed degradation finding. Recorded as a limitation here rather than as a competing active card."
+          }
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": true
+      }
+    },
+    {
+      "key": "mepo",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2026.eacl-long.38 verified 2026-09-22 (pp. 864-892).",
+      "set": {
+        "title": "Rethinking Prompt Optimizers: From Prompt Merits to Optimization (MePO)",
+        "category": "Optimization",
+        "content": "MePO argues that most prompt optimizers are opaque — they produce a better prompt without articulating what makes it better — and replaces that with explicit, model-agnostic prompt 'merits': named, interpretable qualities a good prompt exhibits. Those merits are used to build a preference dataset from a lightweight model, and a local optimizer is trained on it. Zhu et al. evaluated across diverse tasks with both large-scale and lightweight inference models. The distinguishing property is deployability: once trained, the optimizer runs locally, so optimization needs no calls to an external API and no data leaves the host — directly relevant where prompts contain confidential material. The cost is the heaviest setup in this group: you must train and host an optimizer model rather than calling one. The interpretability angle is independently useful even without adopting the method, since named merits give a vocabulary for why one prompt beats another.",
+        "summary": "Uses explicit interpretable prompt merits to train a locally deployable optimizer.",
+        "best_for": "Environments needing offline or private prompt optimization, or an interpretable account of why a prompt is better.",
+        "limitations": "Requires training and hosting a local optimizer model — the highest setup cost in this group. Merit definitions are the method's own framing, not an independently established standard.",
+        "citation_url": "https://aclanthology.org/2026.eacl-long.38/",
+        "canonical_id": "acl:2026.eacl-long.38",
+        "doi": "10.18653/v1/2026.eacl-long.38",
+        "venue": "EACL 2026 (Long Papers)",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Zixiao Zhu, Hanzhang Zhou, Zijian Feng, et al.",
+        "publication_date": "2026-03-01",
+        "aliases": [
+          "MePO",
+          "prompt merits",
+          "merit-guided prompt optimization"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "tras",
+      "action": "INSERT",
+      "verified_source": "PMLR v318 davari26a verified 2026-09-22 — Canadian AI 2026, pp. 693-708.",
+      "set": {
+        "title": "Stabilizing Black-Box Prompt Optimization with Textual Regularization and Signal Aggregation (TRAS)",
+        "category": "Optimization",
+        "content": "TRAS addresses a specific failure of iterative prompt optimizers: drifting away from the task by chasing the latest error. An optimizer told only about what went wrong will rewrite the prompt to fix that case and, in doing so, discard phrasing that was carrying the cases that already worked — so scores oscillate and regress instead of converging. TRAS adds a textual regularizer that explicitly preserves elements associated with successful examples alongside the error-correction signal, anchoring the prompt against drift, and Monte Carlo Signal Aggregation, which pools multiple noisy textual feedback samples before acting so a single unrepresentative failure cannot steer an edit. Davari et al. report higher accuracy, faster convergence and lower query cost, and also formalise 'automatic prompt migration' — carrying a tuned prompt across model versions without losing task alignment, a recurring practical problem. It is black-box, needing no logit access, which makes it usable through ordinary APIs; the aggregation step does mean many sampled evaluations per optimization step. Note the venue is a regional conference, a lower evidence tier than the ACL or ICLR entries here.",
+        "summary": "Stops an optimizer drifting off task by regularizing edits against working examples and aggregating noisy feedback.",
+        "best_for": "Black-box iterative optimization that drifts, oscillates or regresses, and migrating tuned prompts across model versions.",
+        "limitations": "Monte Carlo aggregation requires many sampled evaluations per step. Needs labelled evaluation data. Published at a regional conference — a lower evidence tier than the ACL/ICLR entries; specific benchmarks not extracted.",
+        "citation_url": "https://proceedings.mlr.press/v318/davari26a.html",
+        "canonical_id": "pmlr:v318-davari26a",
+        "venue": "Canadian AI 2026 (PMLR vol. 318, pp. 693-708)",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Mohammad Reza Davari, Utkarsh Garg, Weixin Cai, Eugene Belilovsky",
+        "publication_date": "2026-06-29",
+        "aliases": [
+          "TRAS",
+          "textual regularization",
+          "signal aggregation",
+          "automatic prompt migration",
+          "prompt drift prevention",
+          "optimizer stability"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "gmpo",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2026.acl-long.1089 verified 2026-09-22 (pp. 23744-23773).",
+      "set": {
+        "title": "Gradient-Guided Multi-Judge Prompt Optimization (GMPO)",
+        "category": "Optimization",
+        "content": "GMPO attacks two weaknesses at once: knowing which part of a prompt caused a failure, and trusting a single judge's verdict. For attribution it uses a first-order gradient approximation over a continuous masking direction, scoring each segment's importance with one forward and one backward pass rather than ablating segments one at a time. For the signal it aggregates cross-entropy across several lightweight judge models, so an idiosyncratic preference from any one judge carries less weight. Zhao et al. evaluated across math, reasoning, instruction-following evaluation and safety robustness. The infrastructure requirement is the strictest of any record in this vault: backward-pass access, not merely logits, plus several hosted judge models. That rules out commercial chat APIs entirely and means a self-hosted stack with training-style access. It reads as the direct successor to PMPO by an overlapping team — worth citing together, since the segment-attribution idea is the durable contribution even where the gradient machinery is out of reach.",
+        "summary": "Scores prompt-segment importance via gradient approximation and aggregates judgements across multiple judge models.",
+        "best_for": "Self-hosted stacks with gradient access needing per-segment failure attribution and robustness to single-judge bias.",
+        "limitations": "Requires backward-pass/gradient access — stricter than logit access and impossible through commercial chat APIs. Requires hosting several judge models.",
+        "citation_url": "https://aclanthology.org/2026.acl-long.1089/",
+        "canonical_id": "acl:2026.acl-long.1089",
+        "doi": "10.18653/v1/2026.acl-long.1089",
+        "venue": "ACL 2026 Main Conference (Long Papers)",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "ChenZhuo Zhao, Xinda Wang, Pu Zhao, et al.",
+        "publication_date": "2026-07-01",
+        "aliases": [
+          "GMPO",
+          "gradient-guided prompt optimization",
+          "multi-judge prompt optimization"
+        ],
+        "related_citations": [
+          {
+            "label": "PMPO (predecessor, overlapping team)",
+            "url": "https://aclanthology.org/2025.findings-emnlp.795/",
+            "canonical_id": "acl:2025.findings-emnlp.795",
+            "note": "Shares the masking/segment-localisation lineage; PMPO needs only logits, GMPO needs gradients."
+          }
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "reasearch",
+      "action": "INSERT",
+      "verified_source": "arXiv:2608.06714v2 verified 2026-09-22. journal_ref states 'COLM 2026' but this is an author-editable field and no proceedings or OpenReview record was found — recorded as author_claimed_venue, NOT peer-reviewed.",
+      "set": {
+        "title": "The Optimizer Is the Agent: Reasoning-Driven Search across Prompts, Programs, and ML Workflows (ReASearch)",
+        "category": "Agentic",
+        "content": "ReASearch inverts the usual division of labour in prompt optimization. Instead of a fixed outer controller — evolutionary search, bandit allocation, a scripted refine loop — deciding what to try next, a persistent tool-using agent makes those decisions itself: what to evaluate, how to diagnose a failure, which edit to attempt, when to verify a result and when to abandon a line and restart. The optimization strategy becomes reasoning rather than a predetermined algorithm. Li et al. report evaluation on 14 tasks spanning prompts, programs and ML workflows, with gains of 2 to 40 percent over specialised baselines. This carries the heaviest operational requirements in the vault: persistent long-horizon agent state, sandboxed execution for program and workflow tasks, domain tools, and a strong reasoning model driving it. Provenance is also the least settled here — the COLM 2026 venue appears only in an author-editable arXiv field and could not be independently confirmed, so treat the results as preprint-grade pending a proceedings record.",
+        "summary": "A persistent tool-using agent decides what to evaluate, edit, verify or restart, replacing a fixed outer optimizer.",
+        "best_for": "Long-horizon optimization across prompts, programs and workflows where agent infrastructure already exists.",
+        "limitations": "Requires persistent agent infrastructure, sandboxed execution, domain tools and a strong reasoning model. Venue claim (COLM 2026) is author-asserted in an editable arXiv field and unconfirmed — treat as preprint-grade evidence.",
+        "citation_url": "https://arxiv.org/abs/2608.06714",
+        "canonical_id": "arxiv:2608.06714",
+        "arxiv_id": "2608.06714",
+        "venue": "arXiv preprint (author-claimed COLM 2026, unconfirmed)",
+        "source_type": "preprint",
+        "evidence_status": "author_claimed_venue",
+        "authors": "Junbo Li, Boyi Liu, Canwen Xu, et al.",
+        "publication_date": "2026-08-07",
+        "aliases": [
+          "ReASearch",
+          "the optimizer is the agent",
+          "agentic prompt optimization"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "coral",
+      "action": "INSERT",
+      "verified_source": "Frontiers in AI, DOI 10.3389/frai.2026.1891737, verified 2026-09-22 via Crossref. Published 2026-09-15.",
+      "set": {
+        "title": "CORAL: Co-evolutionary Optimization of Routing and Adaptive Prompts for Cost-Efficient LLM Deployment",
+        "category": "Optimization",
+        "content": "CORAL optimizes prompt content and model routing together rather than in sequence. Two populations co-evolve under multi-objective evolutionary search (NSGA-II/III): one of prompts, one of routing strategies that decide which model handles which request. The rationale is that the two choices interact — a prompt tuned for a frontier model may fail on a cheaper one, so optimizing prompts first and routing afterwards leaves value on the table. Because the search is multi-objective it returns a frontier trading accuracy against cost and latency instead of a single answer. Goenka et al. evaluated on MMLU, GSM8K and WildChat, reporting a 31.4 percent cost reduction against RouteLLM at matched accuracy on GSM8K, and up to 4.8 accuracy points at matched cost — figures tied to those benchmarks and that baseline. Practical prerequisites: a pool of models to route between (single-model deployments cannot use it), per-call cost and latency telemetry as objectives, and labelled evaluation data. Note Frontiers' review model is more permissive than ACL or ICLR.",
+        "summary": "Co-evolves prompts and model-routing strategies under multi-objective search across accuracy, cost and latency.",
+        "best_for": "Multi-model deployments where cost and latency are explicit objectives alongside accuracy.",
+        "limitations": "Requires a pool of models to route among, per-call cost/latency telemetry and labelled evaluation data. Population-based, so evaluation call volume is high. Reported gains are tied to MMLU/GSM8K/WildChat against a RouteLLM baseline. Frontiers' peer review is more permissive than ACL/ICLR.",
+        "citation_url": "https://www.frontiersin.org/journals/artificial-intelligence/articles/10.3389/frai.2026.1891737/full",
+        "canonical_id": "doi:10.3389/frai.2026.1891737",
+        "doi": "10.3389/frai.2026.1891737",
+        "venue": "Frontiers in Artificial Intelligence",
+        "source_type": "peer_reviewed_paper",
+        "evidence_status": "peer_reviewed",
+        "authors": "Shlok Goenka, Ganesh Khekare, Prithu Adhikari, et al.",
+        "publication_date": "2026-09-15",
+        "aliases": [
+          "CORAL",
+          "co-evolutionary routing and prompts",
+          "routing-aware prompt optimization"
+        ],
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false
+      }
+    }
+  ]
+}

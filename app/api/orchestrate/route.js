@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
-import { supabase, searchResearch } from "../../../lib/supabase";
+import { supabase } from "../../../lib/supabase";
 import { getCachedResult, setCachedResult } from "../../../lib/semanticCache";
 import { enforceRateLimit, getClientIp } from "../../../lib/ratelimit";
 import { evaluatePrompt } from "../../../lib/evaluatePrompt";
@@ -8,6 +8,8 @@ import { refinePrompt } from "../../../lib/refinePrompt";
 import { REASONING_MODEL } from "../../../lib/models.mjs";
 import { embedText } from "../../../lib/embeddings.mjs";
 import { MIN_INPUT_LEN, MAX_INPUT_LEN } from "../../../lib/limits.mjs";
+import { retrieveHybridResearch } from "../../../lib/vaultSearch.mjs";
+import { getTechniqueVocabulary, buildRetrievalQuerySystem } from "../../../lib/vaultTaxonomy.mjs";
 
 // The pipeline (retrieve → draft → judge → optional refine) normally finishes
 // in ~20s but can approach a minute when Together is under load and refinement
@@ -284,13 +286,17 @@ async function embedQuery(text) {
 // often wrong matches (measured: 0.2-0.4, e.g. cover letter → EmotionPrompt).
 // Instead, have the model write a short hypothetical passage about which
 // techniques suit the task, and embed THAT — technique-language matches
-// technique-language (measured: 0.5-0.7, correct top-3 on every probe).
+// technique-language. Semantic similarity alone cannot distinguish every
+// optimization sibling; lexical fusion below retains the original intent.
 //
 // The semantic cache must NOT use this embedding: two different intents that
 // call for the same techniques would cache-hit each other and serve the wrong
 // prompt. The cache keys on the raw-intent embedding; only RAG uses this one.
-const RETRIEVAL_QUERY_SYSTEM = `You are a prompt-engineering librarian. Given a user's task, write ONE short passage (3-5 sentences) describing which prompt-engineering techniques would most improve an AI model's output for that task, and why. Name techniques by their standard research names (for example: Chain-of-Thought, Self-Consistency, Tree of Thoughts, Chain-of-Verification, Chain-of-Density, Few-Shot Prompting, ReAct, Toolformer, Skeleton-of-Thought, Least-to-Most, Step-Back Prompting, Plan-and-Solve, Self-Refine, Reflexion, System Persona Adoption, XML tagging and delimiters, Retrieval-Augmented Generation, Constitutional AI, Meta-Prompting, OPRO, G-Eval). Describe the technique mechanism, not the user's task. Output the passage only — no headings, no lists, no preamble.`;
-
+// The technique vocabulary is read from the ACTIVE vault rather than
+// hardcoded. The previous inline list was a snapshot that silently rotted:
+// it still named archived techniques (Toolformer, Constitutional AI) and knew
+// nothing about anything added since. getTechniqueVocabulary() caches per
+// process, so this costs no round trip per request.
 const RETRIEVAL_QUERY_TIMEOUT_MS = 30000;
 const RETRIEVAL_QUERY_MAX_TOKENS = 2000;
 
@@ -298,11 +304,12 @@ const RETRIEVAL_QUERY_MAX_TOKENS = 2000;
 // the raw-intent embedding, so retrieval degrades rather than disappears.
 async function buildRetrievalEmbedding(userInput) {
   try {
+    const vocabulary = await getTechniqueVocabulary(supabase);
     const response = await together.chat.completions.create(
       {
         model: REASONING_MODEL,
         messages: [
-          { role: "system", content: RETRIEVAL_QUERY_SYSTEM },
+          { role: "system", content: buildRetrievalQuerySystem(vocabulary) },
           { role: "user", content: userInput },
         ],
         temperature: 0.2,
@@ -330,25 +337,16 @@ async function buildRetrievalEmbedding(userInput) {
 // similarity is ~0.8 for anything.)
 const RAG_MATCH_THRESHOLD = 0.25;
 
-async function retrieveContext(embedding) {
+/** Records handed to synthesis. Kept at 3 to bound prompt size. */
+const RAG_SOURCE_COUNT = 3;
+
+async function retrieveContext(embedding, originalQuery) {
   try {
-    const chunks = await searchResearch(embedding, { matchCount: 3, matchThreshold: RAG_MATCH_THRESHOLD });
-    if (!chunks.length) return [];
-
-    // The match_prompt_research RPC only returns id/title/content/similarity.
-    // Citation URLs live on the base table — batch-fetch them by id so the UI
-    // can render "Research Applied" badges that deep-link to the source.
-    const ids = chunks.map((c) => c.id);
-    const { data } = await supabase
-      .from("prompt_research")
-      .select("id, citation_url")
-      .in("id", ids);
-    const urlMap = new Map((data ?? []).map((r) => [r.id, r.citation_url]));
-
-    return chunks.map((c) => ({
-      ...c,
-      citation_url: urlMap.get(c.id) ?? null,
-    }));
+    return await retrieveHybridResearch(supabase, embedding, {
+      query: originalQuery,
+      limit: RAG_SOURCE_COUNT,
+      matchThreshold: RAG_MATCH_THRESHOLD,
+    });
   } catch (err) {
     console.warn("RAG retrieval skipped:", err.message);
     return [];
@@ -579,7 +577,7 @@ export async function POST(request) {
         // ── Stage 2b — RAG retrieval ──────────────────────────────────────
         send({ type: "stage", key: "retrieving", label: "Retrieving prompting techniques…" });
         const retrievalEmbedding = (await retrievalEmbeddingPromise) ?? queryEmbedding;
-        const ragChunks = retrievalEmbedding ? await retrieveContext(retrievalEmbedding) : [];
+        const ragChunks = retrievalEmbedding ? await retrieveContext(retrievalEmbedding, userInput) : [];
         const originalTokens = estimateTokens(userInput);
 
         const ragSources = ragChunks.map((c) => ({

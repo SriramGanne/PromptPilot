@@ -1,0 +1,81 @@
+{
+  "$schema_version": "1.0.0",
+  "_doc": [
+    "INDUSTRY / PRODUCT references — tracked, NOT ingested into prompt_research.",
+    "",
+    "DESIGN DECISION: file-only, same reasoning as watchlist.json. These are",
+    "product announcements and documentation, not research. They are recorded so",
+    "the vault has a view of the commercial landscape without any of it competing",
+    "for a technique-retrieval slot.",
+    "",
+    "Every quantitative figure below is VENDOR-REPORTED: the vendor evaluating",
+    "its own product. None was independently replicated in anything retrieved.",
+    "",
+    "All entries verified 2026-09-22."
+  ],
+  "reviewed_at": "2026-09-22",
+  "records": [
+    {
+      "vendor": "Anthropic",
+      "title": "Improve your prompts in the developer console",
+      "product_name": "Prompt Improver",
+      "url": "https://claude.com/blog/prompt-improver",
+      "published": "2024-10-14",
+      "source_type": "vendor_blog",
+      "evidence_status": "vendor_reported",
+      "topic": "Console feature that refines a prompt using chain-of-thought reasoning, example standardization and example enrichment, with structured multi-shot example management and an 'ideal output' column for evaluation.",
+      "vendor_claims": "Increased accuracy by 30% on a multilabel classification test; brought word-count adherence to 100% on a summarization task. Single internal test cases with no published methodology.",
+      "note": "The post title is not 'Prompt Improver' — that is the feature name. Cite the actual title."
+    },
+    {
+      "vendor": "Google Cloud",
+      "title": "Optimize prompts | Gemini Enterprise Agent Platform",
+      "product_name": "Vertex/Gemini prompt optimizer",
+      "url": "https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/prompts/prompt-optimizer?hl=en",
+      "published": "UNVERIFIED — no last-updated date exposed on the page",
+      "source_type": "product_docs",
+      "evidence_status": "vendor_reported",
+      "topic": "Documentation covering three optimizer modes: zero-shot, few-shot, and data-driven.",
+      "vendor_claims": "None found in the retrieved content — capability documentation only.",
+      "note": "Path sits under the 'Gemini Enterprise Agent Platform' namespace, the rebranded successor to the older Vertex AI generative-AI docs tree. Older citations to a vertex-ai/generative-ai/...prompt-optimizer path are likely stale. Cannot be staleness-ranked because no publication date is exposed."
+    },
+    {
+      "vendor": "AWS",
+      "title": "Amazon Bedrock introduces new advanced prompt optimization and migration tool",
+      "product_name": "Bedrock Advanced Prompt Optimization",
+      "url": "https://aws.amazon.com/blogs/aws/amazon-bedrock-introduces-new-advanced-prompt-optimization-and-migration-tool/",
+      "published": "2026-05-14",
+      "source_type": "vendor_blog",
+      "evidence_status": "vendor_reported",
+      "topic": "Optimize a prompt against up to five models at once; multimodal inputs (PNG/JPG/PDF); three evaluation methods (Lambda-based metrics, LLM-as-a-Judge with custom rubrics, or natural-language steering criteria); JSONL prompt templates with ground truth.",
+      "vendor_claims": "None — no performance or benchmark numbers given. Capability and availability only.",
+      "note": "One search summary reported 2026-06-26; the page and the corresponding AWS what's-new entry both indicate May 2026. Minor date conflict flagged."
+    },
+    {
+      "vendor": "Microsoft Research",
+      "title": "PromptWizard: The future of prompt optimization through feedback-driven self-evolving prompts",
+      "product_name": "PromptWizard",
+      "url": "https://www.microsoft.com/en-us/research/blog/promptwizard-the-future-of-prompt-optimization-through-feedback-driven-self-evolving-prompts/",
+      "published": "2024-12-17",
+      "source_type": "vendor_blog",
+      "evidence_status": "vendor_reported",
+      "topic": "Announcement of the open-source PromptWizard framework jointly optimizing instructions and in-context examples via iterative LLM-generated feedback.",
+      "vendor_claims": "Outperformed eight baselines across 45+ tasks; 69 API calls versus 1,730-18,600 for competitors; 24k tokens versus up to 1,488k; effective with as few as five examples; Llama-70B as optimizer roughly matching GPT-4. Microsoft's own evaluation of its own method.",
+      "note": "Linked as a related_citation on the ACTIVE PromptWizard record (arXiv:2405.18369), which is the citable artefact. This blog is the vendor announcement only."
+    },
+    {
+      "vendor": "OpenAI",
+      "title": "Introducing AgentKit",
+      "product_name": "AgentKit (Agent Builder, ChatKit, Connector Registry, Evals)",
+      "url": "https://openai.com/index/introducing-agentkit/",
+      "published": "2025-10-06",
+      "source_type": "vendor_blog",
+      "evidence_status": "vendor_reported",
+      "excluded": true,
+      "exclusion_reason": "RETIREMENT SCHEDULED — verified against OpenAI's first-party deprecations page on 2026-09-22. Agent Builder: deprecation announced 2026-06-03, shutdown 2026-11-30 (replacement: Agents SDK or ChatGPT Workspace Agents). Evals: read-only from 2026-10-31, shutdown 2026-11-30 (replacement: migration guide to Promptfoo). Per the curation rule, NOT ingested as durable guidance. ChatKit is not part of the wind-down and remains available.",
+      "topic": "Launch of Agent Builder (drag-and-drop multi-agent workflow canvas), ChatKit (embeddable chat UI), Connector Registry, and Evals tooling.",
+      "vendor_claims": "Not captured — the page returns HTTP 403 to automated fetch. Title and details came from search results and OpenAI's developer docs, not the page body.",
+      "note": "As of this review (2026-09-22) both Agent Builder and Evals are inside their deprecation window; Evals goes read-only in roughly five weeks. Retained here strictly as a dated historical record."
+    }
+  ]
+}

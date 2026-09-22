@@ -1,0 +1,74 @@
+{
+  "$schema_version": "1.0.0",
+  "_doc": [
+    "REFERENCE-ONLY records. These ARE inserted into prompt_research so they are",
+    "queryable and preserved, but with status='reference_only' and",
+    "retrieval_enabled=false, so they can never win a normal technique-retrieval",
+    "slot.",
+    "",
+    "Rationale: both records are useful to a curator or reader but would rank",
+    "badly as technique guidance. The APO survey is a taxonomy covering the whole",
+    "field, so it is semantically close to every optimization query and would",
+    "crowd out the specific method a user actually needs. Promptimus is vendor",
+    "material whose performance figures are self-reported.",
+    "",
+    "The database CHECK constraint prompt_research_retrieval_state_chk enforces",
+    "retrieval_enabled=false for any non-active status, so this exclusion cannot",
+    "be undone by a future script that forgets the filter."
+  ],
+  "reviewed_at": "2026-09-22",
+  "records": [
+    {
+      "key": "apo-survey",
+      "action": "INSERT",
+      "verified_source": "aclanthology 2025.emnlp-main.1681 verified 2026-09-22. Five-part framework claim verified verbatim in the abstract; the identity of the five components is UNVERIFIED (requires full PDF).",
+      "curation_use": "Use its framework as the organising taxonomy for future vault curation decisions. Do NOT create a competing generic technique chunk from it.",
+      "set": {
+        "title": "A Systematic Survey of Automatic Prompt Optimization Techniques",
+        "category": "Optimization",
+        "content": "A survey of automatic prompt optimization that gives a formal definition of the APO problem, a five-part unifying framework, a categorization of the literature against that framework, and a discussion of open challenges. Useful as a map of the field and as the organising taxonomy for curation decisions — which axis a given optimizer actually innovates on — rather than as guidance for a specific task. Note for provenance: the author list is an Amazon research team, so it is not an independent third-party assessment of Amazon's own prompt-optimization products. The existence of the five-part framework is confirmed from the abstract; the identity of its five components was not verified from the landing page and should be read from the full paper before being relied on.",
+        "summary": "Survey giving a formal APO definition, a five-part unifying framework and a categorization of the literature.",
+        "best_for": "Curation taxonomy and orientation across the automatic prompt optimization field.",
+        "limitations": "A survey, not a method — deliberately excluded from technique retrieval because it is semantically close to every optimization query. Authored by an Amazon team; not an independent assessment of Amazon products. The five framework components were not verified from the landing page.",
+        "citation_url": "https://aclanthology.org/2025.emnlp-main.1681/",
+        "canonical_id": "acl:2025.emnlp-main.1681",
+        "doi": "10.18653/v1/2025.emnlp-main.1681",
+        "arxiv_id": "2502.16923",
+        "venue": "EMNLP 2025 Main Conference",
+        "source_type": "survey",
+        "evidence_status": "peer_reviewed",
+        "authors": "Kiran Ramnath, et al. (Amazon)",
+        "publication_date": "2025-02-24",
+        "aliases": ["APO survey", "automatic prompt optimization survey"],
+        "status": "reference_only",
+        "retrieval_enabled": false,
+        "is_featured": false
+      }
+    },
+    {
+      "key": "promptimus",
+      "action": "INSERT",
+      "verified_source": "Amazon Science blog verified 2026-09-22, dated 2026-05-14. All performance figures are vendor self-reported and not independently replicated.",
+      "curation_use": "Preserve the failure-localization, metric-decomposition and surgical-edit pattern as a design idea. Do not present Amazon's benchmark claims as replicated or peer-reviewed.",
+      "set": {
+        "title": "Promptimus: Improving already good LLM prompts with zero manual engineering (Amazon)",
+        "category": "Optimization",
+        "content": "Vendor description of an APO method aimed specifically at prompts that already perform well, where wholesale rewriting tends to lose ground rather than gain it. The described loop is evaluate, generate feedback, generate a strategy or set of edits, then evaluate candidates. The pattern worth carrying over is the 'edit' mode: rather than regenerating the prompt, it localises which part is responsible for failures and applies surgical edits, preserving surrounding text such as business logic or compliance wording that must not change. That combination — failure localisation, metric decomposition, minimal edit — is a sound design idea independent of the product. Every quantitative claim attached to it is Amazon evaluating its own method: best results on 16 of 20 benchmarks, average 0.792 versus 0.765 for the best baseline, enterprise improvements from 3.18 to 90.27 percent. None of these were independently replicated in anything retrieved, and the item is a blog post, not peer-reviewed work.",
+        "summary": "Vendor method for improving already-strong prompts via failure localisation and surgical edits rather than rewriting.",
+        "best_for": "Design inspiration for minimal-edit optimization that preserves must-not-change prompt sections.",
+        "limitations": "Vendor blog; all figures are Amazon's own self-reported evaluation of Amazon's method, not independently replicated or peer-reviewed. Excluded from technique retrieval for that reason.",
+        "citation_url": "https://www.amazon.science/blog/promptimus-improving-already-good-llm-prompts-with-zero-manual-engineering",
+        "canonical_id": "vendor:amazon-promptimus",
+        "venue": "Amazon Science blog",
+        "source_type": "vendor_blog",
+        "evidence_status": "vendor_reported",
+        "authors": "Zhengyuan Shen, Yunfei Bai, Sullam Jeoung, Shuai Wang (Amazon)",
+        "publication_date": "2026-05-14",
+        "aliases": ["Promptimus", "surgical prompt edits"],
+        "status": "reference_only",
+        "retrieval_enabled": false,
+        "is_featured": false
+      }
+    }
+  ]
+}
