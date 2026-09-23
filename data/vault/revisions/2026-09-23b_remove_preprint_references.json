@@ -1,0 +1,117 @@
+{
+  "$schema_version": "1.0.0",
+  "_doc": [
+    "Follow-up to the peer-review display policy (approved 2026-09-23): active cards must not cite",
+    "or name non-peer-reviewed papers, including in related citations. Chains after",
+    "2026-09-23_peer_review_policy.json; each `expect` is the state that revision left behind."
+  ],
+  "approved_at": "2026-09-23",
+  "revisions": [
+    {
+      "live_id": "e1402861-fda4-4b74-9d6c-3fb9391f9b13",
+      "current_title": "Self-Refine (Iterative Self-Feedback)",
+      "embed_required": true,
+      "reason": "Removed the Constitutional AI attribution: it is an arXiv preprint and the display policy forbids citing non-peer-reviewed papers. The principle-constrained critique variant is kept but explicitly labelled as practitioner guidance, not a finding.",
+      "verified_source": "Policy change approved 2026-09-23. Remaining citations: Self-Refine NeurIPS 2023; Kamoi et al. TACL vol. 12 (peer-reviewed).",
+      "expect": {
+        "content_md5": "8db522db9c480cbd86877a5a9cd433a5",
+        "limitations": "Prompted self-correction is unreliable without external grounding; a TACL survey found no convincing evidence of reliable intrinsic reasoning self-correction. Costs at least two extra calls. The full Constitutional AI method additionally uses supervised fine-tuning and RLAIF and is NOT prompting-only.",
+        "related_citations": [
+          {
+            "url": "https://arxiv.org/abs/2212.08073",
+            "note": "Bai et al. Source of the principle-constrained critique/revision pattern merged into this card. The full method uses supervised fine-tuning and RLAIF — it is not a prompting-only technique.",
+            "label": "Constitutional AI: Harmlessness from AI Feedback (merged source)",
+            "canonical_id": "arxiv:2212.08073"
+          },
+          {
+            "url": "https://aclanthology.org/2024.tacl-1.78/",
+            "note": "Kamoi et al., TACL vol. 12. Source of the intrinsic self-correction limitation.",
+            "label": "When Can LLMs Actually Correct Their Own Mistakes? (critical survey)",
+            "canonical_id": "acl:2024.tacl-1.78"
+          }
+        ]
+      },
+      "set": {
+        "content": "Self-Refine loops a single model through generate, critique, revise: it drafts, then is prompted separately to give specific actionable feedback on that draft, then rewrites using that feedback. Separating the critique turn from the revision turn is what makes it work — a combined 'improve this' instruction tends to produce cosmetic edits. Madaan et al. reported gains across tasks including code optimization, dialogue response and sentiment rewriting, with no additional training. A useful implementation variant, offered as practitioner guidance rather than a finding of this paper, is to constrain the critique against an explicit written list of principles rather than leaving it open-ended: the model checks the draft against each stated rule, then revises. This makes the pass auditable and repeatable, and it is the practical way to enforce style, policy or safety conventions at inference time. The important limitation is that prompted self-correction is unreliable without a dependable signal. A critical TACL survey found no convincing evidence that models reliably correct their own reasoning errors from self-generated feedback alone; self-correction works best where feedback is externally grounded — tests, validators, retrieved sources — or where the task is easy to verify but hard to produce.",
+        "limitations": "Prompted self-correction is unreliable without external grounding; a TACL survey found no convincing evidence of reliable intrinsic reasoning self-correction. Costs at least two extra calls.",
+        "related_citations": [
+          {
+            "url": "https://aclanthology.org/2024.tacl-1.78/",
+            "note": "Kamoi et al., TACL vol. 12. Source of the intrinsic self-correction limitation.",
+            "label": "When Can LLMs Actually Correct Their Own Mistakes? (critical survey)",
+            "canonical_id": "acl:2024.tacl-1.78"
+          }
+        ]
+      }
+    },
+    {
+      "live_id": "e3c3800f-c8f4-4549-bf68-85e8d468574a",
+      "current_title": "CAPO: Cost-Aware Prompt Optimization",
+      "embed_required": true,
+      "reason": "Removed the named reference to the constraint-aware CAPO preprint (and MO-CAPO). The acronym warning is kept without naming non-peer-reviewed work; the disambiguation itself stays in the file-only watchlist.",
+      "verified_source": "Policy change approved 2026-09-23. Primary citation unchanged: PMLR v293 (AutoML 2025).",
+      "expect": {
+        "content_md5": "ec0e8c2f9801b423a11b32dbadaff19e",
+        "related_citations": [
+          {
+            "url": "https://arxiv.org/abs/2608.16068",
+            "note": "A DIFFERENT paper by different authors on constrained agent system prompts. Not this record. Kept on the watchlist.",
+            "label": "DISAMBIGUATION — CAPO: Constraint-Aware Prompt Optimization for LLM Agents",
+            "canonical_id": "arxiv:2608.16068"
+          }
+        ]
+      },
+      "set": {
+        "content": "CAPO makes the cost of optimization a first-class objective rather than an afterthought. Built on evolutionary search with an LLM as the mutation operator, it adds racing — abandoning clearly losing candidates early instead of evaluating every candidate on the full set — and treats prompt length as a penalty, so shorter prompts are preferred where accuracy is comparable. Instructions and few-shot examples are optimized together. Zehle et al. evaluated fifteen combinations: five datasets (SST-5, AG News, Subj, GSM8K, COPA) across three open-weight models (Llama-3.3-70B, Qwen2.5-32B, Mistral-Small-24B), against EvoPromptGA, OPRO and PromptWizard. CAPO won in eleven of the fifteen, with the largest margin around 21 points on Llama-3.3-70B/GSM8K — but gains were small on SST-5 and AG News, so 21 points is the ceiling, not the typical case. Note the acronym: this record is the cost-aware CAPO from AutoML 2025; other, unrelated methods share the name.",
+        "related_citations": []
+      }
+    },
+    {
+      "live_id": "6e2cb16a-2c8b-4405-ba93-506342571534",
+      "current_title": "Chain-of-Thought (CoT) Prompting",
+      "embed_required": false,
+      "reason": "Zero-Shot-CoT is peer-reviewed (NeurIPS 2022); its related citation pointed at arXiv. Re-pointed to the proceedings page.",
+      "verified_source": "proceedings.neurips.cc 2022 hash 8bb0d291acd4acf06ef112099c16f326 returned HTTP 200 with the matching title, 2026-09-23.",
+      "expect": {
+        "related_citations": [
+          {
+            "url": "https://arxiv.org/abs/2205.11916",
+            "note": "Kojima et al., NeurIPS 2022. Origin of 'Let's think step by step'. Reported figures are on text-davinci-002 / PaLM-540B.",
+            "label": "Zero-Shot-CoT — Large Language Models are Zero-Shot Reasoners",
+            "canonical_id": "arxiv:2205.11916"
+          }
+        ]
+      },
+      "set": {
+        "related_citations": [
+          {
+            "url": "https://proceedings.neurips.cc/paper/2022/hash/8bb0d291acd4acf06ef112099c16f326-Abstract-Conference.html",
+            "note": "Kojima et al., NeurIPS 2022. Origin of 'Let's think step by step'. Reported figures are on text-davinci-002 / PaLM-540B.",
+            "label": "Zero-Shot-CoT — Large Language Models are Zero-Shot Reasoners",
+            "canonical_id": "neurips:2022-8bb0d291acd4acf06ef112099c16f326"
+          }
+        ]
+      }
+    },
+    {
+      "live_id": "f15b269b-5fe2-4759-92ed-900ff04e5747",
+      "current_title": "Chain-of-Verification (CoVe)",
+      "embed_required": false,
+      "reason": "Removed the 'arXiv preprint version' related citation; the card already cites the peer-reviewed ACL Findings 2024 version.",
+      "verified_source": "Primary citation aclanthology 2024.findings-acl.212 (verified 2026-09-22).",
+      "expect": {
+        "related_citations": [
+          {
+            "url": "https://arxiv.org/abs/2309.11495",
+            "note": "Superseded by the ACL Findings 2024 version; retained for provenance.",
+            "label": "arXiv preprint version",
+            "canonical_id": "arxiv:2309.11495"
+          }
+        ]
+      },
+      "set": {
+        "related_citations": []
+      }
+    }
+  ]
+}

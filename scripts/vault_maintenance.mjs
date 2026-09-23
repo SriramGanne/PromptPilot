@@ -79,6 +79,25 @@ const loadCatalogue = (f) => {
   return JSON.parse(readFileSync(p, "utf8"));
 };
 
+// Reviewed follow-up changes, applied in filename (date) order on top of the
+// baseline catalogues. See "Revisions" in lib/vaultPlan.mjs.
+const REVISIONS_DIR = join(VAULT_DIR, "revisions");
+function loadRevisions() {
+  if (!existsSync(REVISIONS_DIR)) return [];
+  return readdirSync(REVISIONS_DIR).filter((f) => f.endsWith(".json")).sort()
+    .flatMap((f) => JSON.parse(readFileSync(join(REVISIONS_DIR, f), "utf8")).revisions ?? []);
+}
+
+// Both the planning and the apply-time re-plan must see the same inputs, or
+// assertPlanMatches would compare a revised plan against an unrevised one.
+const catalogueInputs = () => ({
+  existing:      loadCatalogue("active_existing.json").records,
+  additions:     loadCatalogue("active_additions.json").records,
+  referenceOnly: loadCatalogue("reference_only.json").records,
+  revisions:     loadRevisions(),
+  requirePeerReviewed: true,
+});
+
 async function readLiveRows(client) {
   const rows = [];
   let expectedCount;
@@ -153,12 +172,7 @@ async function cmdPlan({ quiet = false } = {}) {
   const client = sb();
   const liveRows = await readLiveRows(client);
 
-  const plan = buildPlan({
-    existing:      loadCatalogue("active_existing.json").records,
-    additions:     loadCatalogue("active_additions.json").records,
-    referenceOnly: loadCatalogue("reference_only.json").records,
-    liveRows,
-  });
+  const plan = buildPlan({ ...catalogueInputs(), liveRows });
 
   if (!quiet) {
     console.log("PLAN");
@@ -259,12 +273,7 @@ async function runRpc({ dryRun, backup }) {
       || backup.project_host !== saved.project_host)) {
     throw new Error("Backup is incomplete, from a different project, or no longer matches all live fields. Take a new backup.");
   }
-  const current = buildPlan({
-    existing: loadCatalogue("active_existing.json").records,
-    additions: loadCatalogue("active_additions.json").records,
-    referenceOnly: loadCatalogue("reference_only.json").records,
-    liveRows,
-  });
+  const current = buildPlan({ ...catalogueInputs(), liveRows });
   assertPlanMatches(saved.plan, current);
   const validation = validatePlan(saved.plan, { liveRows });
   if (!validation.ok) throw new Error(`Plan validation failed: ${validation.errors.join("; ")}`);

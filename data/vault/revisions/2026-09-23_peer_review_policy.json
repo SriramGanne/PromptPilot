@@ -1,0 +1,273 @@
+{
+  "$schema_version": "1.0.0",
+  "_doc": [
+    "Peer-review display policy (approved 2026-09-23): only peer-reviewed sources whose venue",
+    "is verified on the publisher's own site may be active, i.e. shown in the Vault or retrieved.",
+    "Workshop papers count and are labelled as workshop tier. Non-reviewed records are hidden",
+    "(reference_only / watch), never deleted. Five records were mislabelled preprints because",
+    "only arXiv pages were checked originally; they are corrected here, not hidden.",
+    "Each revision's `expect` is the live state it was written against; it applies only if the",
+    "row still matches exactly (content via md5), otherwise the planner fails closed."
+  ],
+  "approved_at": "2026-09-23",
+  "revisions": [
+    {
+      "live_id": "6e2cb16a-2c8b-4405-ba93-506342571534",
+      "current_title": "Chain-of-Thought (CoT) Prompting",
+      "reason": "Venue correction: peer-reviewed at NeurIPS 2022. Previously mislabelled preprint because only the arXiv page (which shows no venue) was checked.",
+      "verified_source": "proceedings.neurips.cc 2022 hash 9d5609613524ecf4f15af0f7b31abca4, verified 2026-09-23.",
+      "embed_required": false,
+      "expect": {
+        "evidence_status": "preprint",
+        "source_type": "preprint",
+        "venue": "arXiv preprint (NeurIPS 2022 publication not confirmed from the arXiv record)",
+        "citation_url": "https://arxiv.org/abs/2201.11903",
+        "canonical_id": "arxiv:2201.11903"
+      },
+      "set": {
+        "evidence_status": "peer_reviewed",
+        "source_type": "peer_reviewed_paper",
+        "venue": "NeurIPS 2022",
+        "citation_url": "https://proceedings.neurips.cc/paper/2022/hash/9d5609613524ecf4f15af0f7b31abca4-Abstract-Conference.html",
+        "canonical_id": "neurips:2022-9d5609613524ecf4f15af0f7b31abca4"
+      }
+    },
+    {
+      "live_id": "76963cc3-d4b9-48f4-869e-5765182ea0f6",
+      "current_title": "Few-Shot Prompting (In-Context Learning)",
+      "reason": "Venue correction: peer-reviewed at NeurIPS 2020 (previously mislabelled preprint).",
+      "verified_source": "papers.nips.cc 2020 hash 1457c0d6bfcb4967418bfb8ac142f64a, verified 2026-09-23.",
+      "embed_required": false,
+      "expect": {
+        "evidence_status": "preprint",
+        "source_type": "preprint",
+        "venue": "arXiv preprint (NeurIPS 2020 publication not confirmed from the arXiv record)",
+        "citation_url": "https://arxiv.org/abs/2005.14165",
+        "canonical_id": "arxiv:2005.14165"
+      },
+      "set": {
+        "evidence_status": "peer_reviewed",
+        "source_type": "peer_reviewed_paper",
+        "venue": "NeurIPS 2020",
+        "citation_url": "https://papers.nips.cc/paper/2020/hash/1457c0d6bfcb4967418bfb8ac142f64a-Abstract.html",
+        "canonical_id": "neurips:2020-1457c0d6bfcb4967418bfb8ac142f64a"
+      }
+    },
+    {
+      "live_id": "aab9a532-f951-4ac5-a43f-e3434fce05c0",
+      "current_title": "Reflexion (Verbal Reinforcement)",
+      "reason": "Venue correction: peer-reviewed at NeurIPS 2023 (previously mislabelled preprint). Author list updated to the proceedings version.",
+      "verified_source": "proceedings.neurips.cc 2023 hash 1b44b878bb782e6954cd888628510e90, verified 2026-09-23.",
+      "embed_required": false,
+      "expect": {
+        "evidence_status": "preprint",
+        "source_type": "preprint",
+        "venue": "arXiv preprint (NeurIPS 2023 publication not confirmed from the arXiv record)",
+        "citation_url": "https://arxiv.org/abs/2303.11366",
+        "canonical_id": "arxiv:2303.11366",
+        "authors": "Noah Shinn, Federico Cassano, Edward Berman, et al."
+      },
+      "set": {
+        "evidence_status": "peer_reviewed",
+        "source_type": "peer_reviewed_paper",
+        "venue": "NeurIPS 2023",
+        "citation_url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/1b44b878bb782e6954cd888628510e90-Abstract-Conference.html",
+        "canonical_id": "neurips:2023-1b44b878bb782e6954cd888628510e90",
+        "authors": "Noah Shinn, Federico Cassano, Ashwin Gopinath, et al."
+      }
+    },
+    {
+      "live_id": "e1402861-fda4-4b74-9d6c-3fb9391f9b13",
+      "current_title": "Self-Refine (Iterative Self-Feedback)",
+      "reason": "Venue correction: peer-reviewed at NeurIPS 2023 (previously mislabelled preprint).",
+      "verified_source": "proceedings.neurips.cc 2023 hash 91edff07232fb1b55a505a9e9f6c0ff3, verified 2026-09-23.",
+      "embed_required": false,
+      "expect": {
+        "evidence_status": "preprint",
+        "source_type": "preprint",
+        "venue": "arXiv preprint (NeurIPS 2023 publication not confirmed from the arXiv record)",
+        "citation_url": "https://arxiv.org/abs/2303.17651",
+        "canonical_id": "arxiv:2303.17651"
+      },
+      "set": {
+        "evidence_status": "peer_reviewed",
+        "source_type": "peer_reviewed_paper",
+        "venue": "NeurIPS 2023",
+        "citation_url": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/91edff07232fb1b55a505a9e9f6c0ff3-Abstract-Conference.html",
+        "canonical_id": "neurips:2023-91edff07232fb1b55a505a9e9f6c0ff3"
+      }
+    },
+    {
+      "live_id": "4f25ef12-74a7-454f-be2e-d9cfdae3fe51",
+      "current_title": "Chain-of-Density (CoD) Summarization",
+      "reason": "Venue correction: peer-reviewed at the NewSum 2023 workshop. Card text claimed no peer-reviewed version existed — corrected, so content changes and must be re-embedded. Kept per policy: workshop papers count, labelled as workshop tier.",
+      "verified_source": "aclanthology 2023.newsum-1.7 (Proceedings of the 4th New Frontiers in Summarization Workshop, pp. 68-74), verified 2026-09-23.",
+      "embed_required": true,
+      "expect": {
+        "evidence_status": "preprint",
+        "source_type": "preprint",
+        "venue": "arXiv preprint",
+        "citation_url": "https://arxiv.org/abs/2309.04269",
+        "canonical_id": "arxiv:2309.04269",
+        "content_md5": "b9c9ab8a038cb80f578446ca60ec72d5",
+        "limitations": "Evaluated with GPT-4 on CNN/DailyMail news only — transfer to reports or transcripts is unevidenced. Preprint, not peer-reviewed. Highest densities reduce readability."
+      },
+      "set": {
+        "evidence_status": "peer_reviewed",
+        "source_type": "peer_reviewed_paper",
+        "venue": "NewSum 2023 — 4th New Frontiers in Summarization Workshop (peer-reviewed workshop)",
+        "citation_url": "https://aclanthology.org/2023.newsum-1.7/",
+        "canonical_id": "acl:2023.newsum-1.7",
+        "content": "Chain-of-Density produces a summary through successive rewrites at a fixed length. The model writes an initial sparse summary, then repeatedly identifies salient entities missing from it and rewrites to include them without increasing the length, which forces compression: filler gives way to named entities and specifics. Adams et al. evaluated this on CNN/DailyMail news articles using GPT-4, and reported that human annotators preferred the denser intermediate steps over the sparse first pass — though preference fell away at the highest densities, where summaries became harder to read. Two scope caveats matter. The study used one model on one news-summarization dataset, so transfer to long reports, meeting transcripts or technical documents is plausible but unevidenced. And it was published at a peer-reviewed workshop (NewSum 2023) rather than a main conference. The mechanism is still a sound and cheap way to raise information density when a length ceiling is fixed; just treat the optimum number of rounds as something to tune, not as a published constant.",
+        "limitations": "Evaluated with GPT-4 on CNN/DailyMail news only — transfer to reports or transcripts is unevidenced. Peer-reviewed at workshop tier (NewSum 2023), not a main conference. Highest densities reduce readability."
+      }
+    },
+    {
+      "live_id": "7baa0453-044d-4b6d-bba2-876b892f70ff",
+      "current_title": "Expert / Persona Prompting — Mixed Evidence",
+      "reason": "Re-cited on the peer-reviewed EMNLP 2024 study. The previous primary source (ExpertPrompting, arXiv 2305.14688) is a preprint with no published version; its claims are removed from the card per the peer-review display policy.",
+      "verified_source": "aclanthology 2024.findings-emnlp.888 (DOI 10.18653/v1/2024.findings-emnlp.888; arXiv 2311.10054), verified 2026-09-22/23.",
+      "embed_required": true,
+      "expect": {
+        "evidence_status": "preprint",
+        "source_type": "preprint",
+        "venue": "arXiv preprint",
+        "citation_url": "https://arxiv.org/abs/2305.14688",
+        "canonical_id": "arxiv:2305.14688",
+        "doi": null,
+        "arxiv_id": "2305.14688",
+        "authors": "Benfeng Xu, An Yang, Junyang Lin, et al.",
+        "publication_date": "2023-05-24",
+        "aliases": [
+          "ExpertPrompting",
+          "persona prompting",
+          "role prompting",
+          "system persona"
+        ],
+        "related_citations": [
+          {
+            "url": "https://aclanthology.org/2024.findings-emnlp.888/",
+            "note": "Zheng et al., Findings EMNLP 2024. 4 LLM families, 2,410 factual questions, 162 roles: personas did not reliably beat no-persona control.",
+            "label": "When 'A Helpful Assistant' Is Not Really Helpful (counter-evidence)",
+            "canonical_id": "acl:2024.findings-emnlp.888"
+          },
+          {
+            "url": "https://aclanthology.org/2025.emnlp-main.1364/",
+            "note": "Luz de Araujo et al., EMNLP 2025. 9 LLMs x 27 tasks: expert personas mostly neutral-to-positive, but irrelevant detail caused large drops.",
+            "label": "Principled Personas (robustness evidence)",
+            "canonical_id": "acl:2025.emnlp-main.1364"
+          }
+        ],
+        "summary": "Detailed task-relevant expert descriptions may help; generic role labels do not reliably improve factual accuracy.",
+        "best_for": "Steering tone, vocabulary and framing with a detailed, genuinely relevant expert description.",
+        "limitations": "Generic personas did not reliably improve factual accuracy across 4 model families / 162 roles. Irrelevant persona detail can cause large accuracy drops. Benefits are mostly stylistic, not factual; automatic persona selection performs near-randomly.",
+        "content_md5": "b3f768feb9b78605e2338ab019512298"
+      },
+      "set": {
+        "evidence_status": "peer_reviewed",
+        "source_type": "peer_reviewed_paper",
+        "venue": "Findings of the ACL: EMNLP 2024",
+        "citation_url": "https://aclanthology.org/2024.findings-emnlp.888/",
+        "canonical_id": "acl:2024.findings-emnlp.888",
+        "doi": "10.18653/v1/2024.findings-emnlp.888",
+        "arxiv_id": "2311.10054",
+        "authors": "Mingqian Zheng, Jiaxin Pei, Lajanugen Logeswaran, et al.",
+        "publication_date": "2024-11-01",
+        "aliases": [
+          "persona prompting",
+          "role prompting",
+          "system persona",
+          "expert persona"
+        ],
+        "related_citations": [
+          {
+            "url": "https://aclanthology.org/2025.emnlp-main.1364/",
+            "note": "Luz de Araujo et al., EMNLP 2025. 9 LLMs x 27 tasks: expert personas mostly neutral-to-positive, but irrelevant detail caused large drops.",
+            "label": "Principled Personas (robustness evidence)",
+            "canonical_id": "acl:2025.emnlp-main.1364"
+          }
+        ],
+        "summary": "Generic personas do not reliably improve factual accuracy; irrelevant persona detail can actively hurt.",
+        "best_for": "Deciding whether a role or persona line is worth adding — and keeping any persona relevant and minimal.",
+        "limitations": "Generic personas did not reliably improve factual accuracy across 4 model families and 162 roles, and the best persona per question could not be predicted better than chance. Irrelevant persona detail can cause large accuracy drops; mitigations helped only the largest models. Any benefit is mainly stylistic.",
+        "content": "Assigning the model a role is one of the most common prompt moves and one of the least reliably beneficial. The strongest evidence concerns the generic version: Zheng et al. tested 162 role descriptions across four model families on 2,410 factual questions and found that adding a persona to the system prompt did not reliably improve accuracy over no persona at all, with the effect of a given persona close to random. Choosing the best persona for each question after the fact did help, but predicting that persona automatically performed no better than chance, so the benefit cannot be captured by a fixed role label. Luz de Araujo et al., across nine models and 27 tasks, found expert personas mostly neutral-to-positive, but showed that irrelevant persona details, such as biographical padding unrelated to the task, can cause large accuracy drops, and that mitigations helped only the largest models. The practical reading: a generic label such as 'You are a senior developer' should not be expected to improve factual correctness. If a persona is used to steer tone, vocabulary or framing, keep it directly relevant to the task and free of irrelevant detail."
+      }
+    },
+    {
+      "live_id": "42f02983-0f0d-47eb-abcd-048308591a6c",
+      "current_title": "Meta-Prompting (Task-Agnostic Scaffolding)",
+      "reason": "Hidden: preprint only (arXiv 2401.12954), no peer-reviewed publication found. Retained as reference-only for provenance.",
+      "verified_source": "arXiv 2401.12954; no venue found on publisher sites or Semantic Scholar, checked 2026-09-23.",
+      "embed_required": false,
+      "expect": {
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": true,
+        "review_note": "Replaced broken citation arXiv:2311.11432 (mechanical engineering paper) on 2026-09-22."
+      },
+      "set": {
+        "status": "reference_only",
+        "retrieval_enabled": false,
+        "is_featured": false,
+        "review_note": "Hidden 2026-09-23 under the peer-review display policy: preprint only."
+      }
+    },
+    {
+      "live_id": "70b90f6d-fc9e-42f8-a63b-32bda5afde45",
+      "current_title": "PromptWizard: Task-Aware Prompt Optimization Framework",
+      "reason": "Hidden: preprint / Microsoft tech report, not peer-reviewed.",
+      "verified_source": "arXiv 2405.18369 (MSR-TR-03), verified 2026-09-22.",
+      "embed_required": false,
+      "expect": {
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false,
+        "review_note": null
+      },
+      "set": {
+        "status": "reference_only",
+        "retrieval_enabled": false,
+        "is_featured": false,
+        "review_note": "Hidden 2026-09-23 under the peer-review display policy: preprint / tech report."
+      }
+    },
+    {
+      "live_id": "0b0e0d40-6848-4412-bf21-63d599ea350a",
+      "current_title": "The Optimizer Is the Agent: Reasoning-Driven Search across Prompts, Programs, and ML Workflows (ReASearch)",
+      "reason": "Moved to watch: COLM 2026 acceptance is claimed only in the author-editable arXiv journal_ref. Promote once a proceedings record confirms it.",
+      "verified_source": "arXiv 2608.06714v2 journal_ref; no COLM proceedings/OpenReview record found, checked 2026-09-22.",
+      "embed_required": false,
+      "expect": {
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": false,
+        "review_note": null
+      },
+      "set": {
+        "status": "watch",
+        "retrieval_enabled": false,
+        "is_featured": false,
+        "review_note": "Hidden 2026-09-23 under the peer-review display policy: venue author-claimed, pending COLM 2026 proceedings."
+      }
+    },
+    {
+      "live_id": "ebda91f5-4c6f-43e7-963c-0ce8c04cf181",
+      "current_title": "Structured Delimiters, including XML",
+      "reason": "Hidden: vendor product documentation, not a peer-reviewed paper.",
+      "verified_source": "Anthropic prompting best-practices docs (vendor), verified 2026-09-22.",
+      "embed_required": false,
+      "expect": {
+        "status": "active",
+        "retrieval_enabled": true,
+        "is_featured": true,
+        "review_note": "Renamed from 'XML Tagging & Delimiters'; stale docs.anthropic.com URL replaced after confirming a 301 redirect to the consolidated best-practices page on 2026-09-22. Unsupported Gemma reference removed."
+      },
+      "set": {
+        "status": "reference_only",
+        "retrieval_enabled": false,
+        "is_featured": false,
+        "review_note": "Hidden 2026-09-23 under the peer-review display policy: vendor documentation, not research."
+      }
+    }
+  ]
+}
