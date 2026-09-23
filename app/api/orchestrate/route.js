@@ -9,6 +9,8 @@ import { REASONING_MODEL } from "../../../lib/models.mjs";
 import { embedText } from "../../../lib/embeddings.mjs";
 import { MIN_INPUT_LEN, MAX_INPUT_LEN } from "../../../lib/limits.mjs";
 import { retrieveHybridResearch } from "../../../lib/vaultSearch.mjs";
+import { selectResearchWithinBudget, formatResearchRecord } from "../../../lib/researchSelection.mjs";
+import { getCitedSources } from "../../../lib/researchCitations.mjs";
 import { getTechniqueVocabulary, buildRetrievalQuerySystem } from "../../../lib/vaultTaxonomy.mjs";
 import { hasSuppliedSourceBlock, hasMissingSourceMaterial, ensureSourceMaterialInPrompt } from "../../../lib/sourceMaterialGuard.mjs";
 
@@ -136,7 +138,7 @@ Your output is a PROMPT that will later be sent to a SEPARATE AI model. You must
 
 ## 2026 REASONING MARKERS:
 - Use \`<thinking>\` tags for internal logic (hidden from casual users).
-- Use \`<context_grounding>\` to cite which research paper/best practice justifies the prompt structure.
+- In \`<context_grounding>\`, cite only numbered research entries whose techniques are visibly used in the prompt body. Write one line per cited entry: [N] A brief explanation of the technique and where it appears in the prompt. If no supplied paper shaped the prompt, write "none". Never cite a paper just because it was supplied.
 - Use \`<eval_prediction>\` to estimate the Ragas faithfulness score.
 
 ## STYLE RULES:
@@ -340,14 +342,14 @@ async function buildRetrievalEmbedding(userInput) {
 // similarity is ~0.8 for anything.)
 const RAG_MATCH_THRESHOLD = 0.25;
 
-/** Records handed to synthesis. Kept at 3 to bound prompt size. */
-const RAG_SOURCE_COUNT = 3;
+// Keep the research context bounded even when many vault records qualify.
+const RAG_CONTEXT_CHAR_BUDGET = 8000;
 
 async function retrieveContext(embedding, originalQuery) {
   try {
     return await retrieveHybridResearch(supabase, embedding, {
       query: originalQuery,
-      limit: RAG_SOURCE_COUNT,
+      limit: Infinity,
       matchThreshold: RAG_MATCH_THRESHOLD,
     });
   } catch (err) {
@@ -369,9 +371,7 @@ function buildSynthesisSystem(targetModel, ragChunks) {
           "---",
           "RETRIEVED RESEARCH CONTEXT — ground your optimization in these techniques:",
           "",
-          ...ragChunks.map(
-            (c, i) => `[${i + 1}] ${c.title} (similarity: ${c.similarity.toFixed(2)})\n${c.content}`
-          ),
+          ...ragChunks.map((c, i) => formatResearchRecord(c, i + 1)),
           "---",
         ].join("\n")
       : "No RAG context retrieved — rely on built-in best practices.";
@@ -388,7 +388,7 @@ OUTPUT FORMAT — you must produce all four sections in order:
 </thinking>
 
 <context_grounding>
-[Cite which retrieved research entries (by title) justify your structural choices]
+[One line per paper actually reflected in the prompt: [N] technique and where it appears. Use only supplied IDs; write "none" if none were used.]
 </context_grounding>
 
 ### PROMPT START
@@ -592,10 +592,16 @@ export async function POST(request) {
         // ── Stage 2b — RAG retrieval ──────────────────────────────────────
         send({ type: "stage", key: "retrieving", label: "Retrieving prompting techniques…" });
         const retrievalEmbedding = (await retrievalEmbeddingPromise) ?? queryEmbedding;
-        const ragChunks = retrievalEmbedding ? await retrieveContext(retrievalEmbedding, userInput) : [];
+        const qualifyingChunks = retrievalEmbedding ? await retrieveContext(retrievalEmbedding, userInput) : [];
+        const {
+          selected: ragChunks,
+          qualifyingCount: qualifyingSourceCount,
+          suppliedCount: suppliedSourceCount,
+        } = selectResearchWithinBudget(qualifyingChunks, RAG_CONTEXT_CHAR_BUDGET);
         const originalTokens = estimateTokens(userInput);
 
-        const ragSources = ragChunks.map((c) => ({
+        const ragSources = ragChunks.map((c, i) => ({
+          id: i + 1,
           title: c.title,
           similarity: c.similarity,
           citation_url: c.citation_url ?? null,
@@ -606,6 +612,8 @@ export async function POST(request) {
           type: "meta",
           clarityScore: gap.clarityScore,
           ragSources,
+          qualifyingSourceCount,
+          suppliedSourceCount,
           originalTokens,
           targetModel,
         });
@@ -740,6 +748,7 @@ export async function POST(request) {
         // Lexical faithfulness retained for the existing 0–1 metrics column and
         // dashboard fallback; the judge's scores live in evaluationResult.
         const faithfulnessScore = computeFaithfulness(ragChunks, finalPrompt);
+        const citedSources = getCitedSources(finalPrompt, ragSources);
 
         const finalPayload = {
           status: "optimized",
@@ -752,6 +761,9 @@ export async function POST(request) {
           refinementSuccessful,
           faithfulnessScore,
           ragSources,
+          citedSources,
+          qualifyingSourceCount,
+          suppliedSourceCount,
           clarityScore: gap.clarityScore,
           originalTokens,
           optimizedTokens,

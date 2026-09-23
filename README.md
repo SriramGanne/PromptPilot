@@ -12,7 +12,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 * **Agentic Interviewer:** Uses a "Gap Analysis" logic to identify missing variables (Context, Persona, Format) and asks targeted follow-up questions before generating.
 * **Knowledge Vault (RAG):** A curated, versioned collection spanning foundational and current prompt-engineering research — from *Chain-of-Thought* (2022) through automatic prompt optimization (*MIPRO*, *TextGrad*, *GEPA*). Records carry lifecycle state, so superseded or model-dependent techniques are archived with their provenance rather than deleted, and never reach retrieval.
 * **Asymmetric Reasoning:** Powered by **GLM-5.3-Flash**, a 320B-parameter Mixture-of-Experts model (18B active) delivering high-density logic at low latency.
-* **Power Mode:** Provides a transparent "Reasoning Trace" (`<thinking>` tags), showing the user exactly how the AI interpreted their request.
+* **Review details:** Shows the model's reasoning trace, quality scores, and papers it cites for the final prompt.
 * **Model-Aware Optimization:** Tailors output structure specifically for the target model (ChatGPT, Claude, Gemini, or Grok).
 * **Draft-First Delivery:** The optimized prompt appears as soon as it is drafted — readable and copyable while the quality check runs in the background. A stage stepper shows which step is active and how long it has taken.
 
@@ -31,7 +31,7 @@ Most professional users struggle with **Instruction Drift** and **Prompt Ambigui
 
 ### Evaluator-Optimizer Design Pattern
 PromptPilot doesn't just "guess." It follows a closed-loop system:
-1.  **Retrieval:** A HyDE-style rewrite supplies the semantic signal. Hybrid retrieval combines cosine similarity with BM25F lexical evidence from the original user intent across the active vault, then selects three sources with a preference for category variety. This distinguishes similar optimization papers without relying on the rewrite to preserve every clue.
+1.  **Retrieval:** A HyDE-style rewrite supplies the semantic signal. Hybrid retrieval combines cosine similarity with BM25F lexical evidence from the original user intent across the active vault, then supplies qualifying whole records in relevance order within an 8,000-character research-context budget.
 2.  **Gap Analysis:** Scores the intent's clarity and, when it is too vague, asks up to three targeted follow-up questions instead of guessing.
 3.  **Synthesis:** GLM-5.3-Flash generates the "Improved Prompt" (V1), which is streamed to the user as a draft.
 4.  **Audit:** `gpt-5-mini` grades V1 on five 0–10 metrics (intent fidelity, technique use, constraint adherence, task success, output quality) plus a 0–100 composite.
@@ -50,9 +50,9 @@ run to run, so these are ranges rather than guarantees.
 | Final prompt (after judge + optional refinement) | ~20–30s |
 | Semantic cache hit | ~3s |
 
-* **Context Grounding:** Retrieved techniques are cited in the Research Blueprint on every
-  generation that clears the similarity floor; intents with no relevant match fall back to
-  built-in best practices and say so rather than padding with weak citations.
+* **Context Grounding:** The research list shows only papers the model explicitly cites for
+  the final prompt. Citation IDs are checked against supplied records, but model citations
+  cannot prove which papers influenced internal reasoning. If none are cited, the UI says so.
 * **Reasoning depth:** All model calls run at `reasoning_effort: "low"`. The synthesis prompt
   already asks for an explicit `<thinking>` section, so the default depth duplicated that work
   for ~4–6x the latency with no measured quality gain.

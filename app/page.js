@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import NavTabs from "./_components/NavTabs";
 import BrandMark from "./_components/BrandMark";
@@ -10,6 +10,7 @@ import { deriveReviewStatus, isCopyStale } from "../lib/reviewStatus.mjs";
 import { EMPTY_STAGE_TIMELINE, getStageElapsedMs, reduceStageTimeline } from "../lib/stageTimeline.mjs";
 
 const TARGET_MODELS = ["ChatGPT", "Claude", "Gemini", "Grok"];
+const EMPTY_CITATIONS = [];
 const STEPS = [
   { id: 1, label: "Intent" },
   // `short` is used at phone width, where "Clarification" clipped to "Clari…".
@@ -502,12 +503,12 @@ export default function Home() {
           </div>
         </section>
 
-        {/* ── Power panel ─────────────────────────────────────────────── */}
+        {/* ── Review details panel ────────────────────────────────────── */}
         {powerMode && (
           <aside className="space-y-5 lg:sticky lg:top-24 lg:self-start animate-[fadeIn_300ms_ease-out]">
             <CacheStatusCard result={result} />
             <QualityDashboard result={result} />
-            <RagSourcesCard result={result} />
+            <CitedPapersCard result={result} />
           </aside>
         )}
       </main>
@@ -572,7 +573,7 @@ function PowerToggle({ enabled, onChange }) {
         >
           <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
         </svg>
-        <span className={`whitespace-nowrap ${enabled ? "text-text" : "text-text-muted"}`}>Power Mode</span>
+        <span className={`whitespace-nowrap ${enabled ? "text-text" : "text-text-muted"}`}>Review details</span>
       </span>
       {/* Track: h-6 w-12 rounded-full. Knob: h-5 w-5 with p-0.5 padding, so
           on-state translates by exactly track_w − knob_w − 2·padding = 48 − 20 − 4 = 24px
@@ -862,6 +863,7 @@ function StepResult({
   const loading = streaming && !optimizedPrompt;
   const checkingQuality = streaming && Boolean(optimizedPrompt);
   const reviewStatus = deriveReviewStatus(result);
+  const citedSources = Array.isArray(result?.citedSources) ? result.citedSources : EMPTY_CITATIONS;
 
   return (
     <div className="p-6 sm:p-8">
@@ -894,7 +896,7 @@ function StepResult({
         </div>
       </div>
 
-      {/* Reasoning — Power Mode only, collapsed by default via <details>.
+      {/* Reasoning — Review details only, collapsed by default via <details>.
           Browser-native progressive disclosure: no JS state, no layout glue.
           The summary acts as the toggle button; chevron rotates on open. */}
       {powerMode && hasReasoning && (
@@ -907,7 +909,7 @@ function StepResult({
       )}
 
       {/* Improved prompt — high-contrast block.
-          Uses flex + p-0 so the Research Blueprint footer can live inside
+          Uses flex + p-0 so the cited papers footer can live inside
           with its own padding, a top border, and a distinct muted bg.
           `justCompleted` adds a brief ring/shadow that fades out to signal
           that the stream has finished — transition-[box-shadow,border-color]
@@ -965,14 +967,14 @@ function StepResult({
           )}
         </div>
 
-        <ResearchBlueprintFooter sources={result?.ragSources ?? []} pending={loading} />
+        <CitedPapersFooter sources={citedSources} pending={!result || Boolean(result.streaming)} />
       </div>
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Reasoning Disclosure — Power Mode only. Native <details> for progressive
+// Reasoning Disclosure — Review details only. Native <details> for progressive
 // disclosure (no JS state). Closed by default. The summary is styled as a
 // professional, clickable button with a chevron that rotates 90° when open.
 //
@@ -1228,97 +1230,76 @@ function BrainIcon() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// Research Blueprint — footer inside the Optimized Prompt panel. Renders
-// citations as interactive chips. A top border + subtle indigo/accent tint
-// separates it visually from the prompt text above.
+// The footer and Review details show the same final-prompt citations. Papers
+// merely supplied to synthesis must not appear as cited.
 // ═══════════════════════════════════════════════════════════════════════════
 
-function ResearchBlueprintFooter({ sources, pending = false }) {
+function CitedPapersFooter({ sources, pending = false }) {
   return (
     <div className="border-t border-accent/20 bg-accent/[0.04] px-5 py-4">
       <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.14em] text-text-dim">
-        <BlueprintIcon />
-        <span>Research Blueprint</span>
+        <span>Papers cited for this prompt</span>
         <span className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-text-muted">
-          {sources.length}
+          {pending ? "…" : sources.length}
         </span>
       </div>
-
-      {sources.length === 0 ? (
-        <div className="mt-2.5 text-[12px] text-text-dim">
-          {pending
-            ? "Retrieving research…"
-            : "No research grounded this prompt — relying on built-in best practices."}
-        </div>
-      ) : (
-        <div className="mt-3 flex flex-wrap gap-2">
-          {sources.map((s, i) => (
-            <CitationChip key={i} index={i + 1} source={s} />
-          ))}
-        </div>
-      )}
+      <CitedPaperList sources={sources} pending={pending} />
     </div>
   );
 }
 
-function CitationChip({ index, source }) {
-  const Tag = source.citation_url ? "a" : "div";
-  const linkProps = source.citation_url
-    ? { href: source.citation_url, target: "_blank", rel: "noopener noreferrer" }
-    : {};
-  return (
-    <Tag
-      {...linkProps}
-      className={`group inline-flex max-w-full items-center gap-2 rounded-full border border-accent/30 bg-surface/70 px-3 py-1 text-[12px] text-text transition ${
-        source.citation_url
-          ? "cursor-pointer hover:border-accent/60 hover:bg-accent/15 hover:text-accent"
-          : "cursor-default"
-      }`}
-    >
-      <span className="inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-accent/25 font-mono text-[10px] font-bold text-accent">
-        {index}
-      </span>
-      <span className="min-w-0 truncate font-medium">{source.title}</span>
-      {source.citation_url && (
-        <svg
-          width="11"
-          height="11"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.25"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="shrink-0 text-text-dim transition group-hover:text-accent"
-          aria-hidden="true"
-        >
-          <path d="M7 17 17 7" />
-          <path d="M8 7h9v9" />
-        </svg>
-      )}
-    </Tag>
-  );
-}
+function CitedPaperList({ sources, pending = false }) {
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
+  useEffect(() => setExpanded(false), [sources]);
 
-function BlueprintIcon() {
-  // Grid/blueprint glyph — hints at the "underlying architecture" metaphor.
+  if (pending) {
+    return <p className="mt-2.5 text-[12px] text-text-dim">Identifying citations…</p>;
+  }
+  if (sources.length === 0) {
+    return <p className="mt-2.5 text-[12px] text-text-dim">No papers cited for this prompt.</p>;
+  }
+
+  const visibleSources = expanded ? sources : sources.slice(0, 3);
   return (
-    <svg
-      width="12"
-      height="12"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className="text-accent-2"
-      aria-hidden="true"
-    >
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M3 9h18" />
-      <path d="M9 3v18" />
-    </svg>
+    <>
+      <ol id={listId} className="mt-3 space-y-3">
+        {visibleSources.map((source, index) => (
+          <li key={source.id ?? index} className="flex min-w-0 items-start gap-2.5 text-[12px] leading-relaxed">
+            <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-accent/15 font-mono text-[10px] font-bold text-accent">
+              {index + 1}
+            </span>
+            <div className="min-w-0 flex-1 break-words">
+              {source.citation_url ? (
+                <a
+                  href={source.citation_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-medium text-text underline decoration-accent/40 underline-offset-2 hover:text-accent-2"
+                >
+                  {source.title}
+                </a>
+              ) : (
+                <span className="font-medium text-text">{source.title}</span>
+              )}
+              {source.reason && <p className="mt-0.5 break-words text-text-muted">{source.reason}</p>}
+            </div>
+          </li>
+        ))}
+      </ol>
+      {sources.length > 3 && (
+        <button
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={listId}
+          aria-label={expanded ? "Show fewer cited papers" : `Show all ${sources.length} cited papers`}
+          onClick={() => setExpanded((value) => !value)}
+          className="mt-3 min-h-11 rounded-lg text-[12px] font-medium text-accent-2 underline underline-offset-2 hover:text-accent sm:min-h-0"
+        >
+          {expanded ? "Show fewer" : "Show all"}
+        </button>
+      )}
+    </>
   );
 }
 
@@ -1515,7 +1496,7 @@ function MetricCard({ metric }) {
 
 // Accessible help affordance: a small "i" glyph carrying the metric description
 // in a native title tooltip (works on desktop hover and avoids any custom
-// overlay that could overflow the narrow Power-Mode column on mobile).
+// overlay that could overflow the narrow Review details column on mobile).
 function MetricInfo({ tooltip }) {
   if (!tooltip) return null;
   return (
@@ -1530,46 +1511,20 @@ function MetricInfo({ tooltip }) {
   );
 }
 
-function RagSourcesCard({ result }) {
-  const sources = result?.ragSources ?? [];
+function CitedPapersCard({ result }) {
+  const sources = Array.isArray(result?.citedSources) ? result.citedSources : EMPTY_CITATIONS;
+  const pending = !result || Boolean(result.streaming);
   return (
     <div className="rounded-2xl border border-border bg-surface/80 p-5 backdrop-blur-sm">
       <div className="flex items-center justify-between">
         <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-text-dim">
-          RAG Sources
+          Papers cited for this prompt
         </div>
         <div className="text-[11px] font-medium text-text-dim">
-          {sources.length} {sources.length === 1 ? "entry" : "entries"}
+          {pending ? "…" : sources.length}
         </div>
       </div>
-
-      {sources.length === 0 ? (
-        <div className="mt-3 text-[13px] text-text-muted">
-          {result ? "No grounded sources for this prompt." : "Awaiting first query…"}
-        </div>
-      ) : (
-        <ul className="mt-3 space-y-2.5">
-          {sources.map((s, i) => (
-            <li key={i} className="flex items-center gap-3">
-              <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-accent/15 text-[11px] font-bold text-accent">
-                {i + 1}
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-[13px] text-text">{s.title}</div>
-                <div className="mt-1 h-1 w-full overflow-hidden rounded-full bg-surface-2">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-accent to-accent-2"
-                    style={{ width: `${(s.similarity ?? 0) * 100}%` }}
-                  />
-                </div>
-              </div>
-              <span className="w-10 shrink-0 text-right font-mono text-[11px] text-text-muted">
-                {((s.similarity ?? 0) * 100).toFixed(0)}%
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
+      <CitedPaperList sources={sources} pending={pending} />
     </div>
   );
 }
