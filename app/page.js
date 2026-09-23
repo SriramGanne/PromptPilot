@@ -6,6 +6,8 @@ import NavTabs from "./_components/NavTabs";
 import BrandMark from "./_components/BrandMark";
 import { getMetricsForDisplay, resolveOverallPercent } from "../lib/evalMetrics.mjs";
 import { MAX_INPUT_LEN, INPUT_COUNTER_THRESHOLD } from "../lib/limits.mjs";
+import { deriveReviewStatus, isCopyStale } from "../lib/reviewStatus.mjs";
+import { EMPTY_STAGE_TIMELINE, getStageElapsedMs, reduceStageTimeline } from "../lib/stageTimeline.mjs";
 
 const TARGET_MODELS = ["ChatGPT", "Claude", "Gemini", "Grok"];
 const STEPS = [
@@ -65,6 +67,8 @@ export default function Home() {
   const [error, setError] = useState("");
   const [powerMode, setPowerMode] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [copyStale, setCopyStale] = useState(false);
+  const copiedPromptRef = useRef(null);
 
   // Split-state for the structured output. Both are derived from the same
   // stream, parsed incrementally: while the model is still inside <thinking>,
@@ -73,10 +77,8 @@ export default function Home() {
   const [thinkingContent, setThinkingContent] = useState("");
   const [optimizedPrompt, setOptimizedPrompt] = useState("");
 
-  // Stage timeline for the stepper: { stages: { [key]: { start, end } },
-  // active, startedAt, endedAt }. Driven by the server's `stage` events (which
-  // carry a stable `key`), plus `draft`/`done`/`error` to close the last one.
-  const [progress, setProgress] = useState(EMPTY_PROGRESS);
+  // Server elapsed times keep the stepper accurate when stream events arrive together.
+  const [progress, setProgress] = useState(EMPTY_STAGE_TIMELINE);
 
   // React 19: async callbacks inside startTransition keep the UI responsive
   // without needing a manual isLoading flag.
@@ -166,8 +168,10 @@ export default function Home() {
                      //                   doesn't flash while we await clarifying
     setThinkingContent("");
     setOptimizedPrompt("");
-    setProgress({ ...EMPTY_PROGRESS, startedAt: Date.now() });
+    setProgress(EMPTY_STAGE_TIMELINE);
     setCopied(false);
+    setCopyStale(false);
+    copiedPromptRef.current = null;
     setJustCompleted(false);
     didAutoScrollRef.current = false; // re-arm auto-scroll for this run
 
@@ -213,20 +217,9 @@ export default function Home() {
       setOptimizedPrompt(p.prompt);
     };
 
-    // Close whichever stage is active (if any) and optionally open `key`.
-    // The clock is read OUTSIDE the updater: React may re-run updaters when a
-    // transition render restarts, and a Date.now() inside would then collapse
-    // every stage's start/end onto the replay instant (all durations → 0s).
-    const advanceStage = (key) => {
-      const now = Date.now();
-      setProgress((p) => {
-        const stages = { ...p.stages };
-        if (p.active && stages[p.active] && !stages[p.active].end) {
-          stages[p.active] = { ...stages[p.active], end: now };
-        }
-        if (key) stages[key] = { start: now };
-        return { ...p, stages, active: key ?? null, endedAt: key ? null : now };
-      });
+    const recordTimelineEvent = (ev) => {
+      const receivedAt = Date.now();
+      setProgress((p) => reduceStageTimeline(p, ev, receivedAt));
     };
 
     const applyEvent = (ev) => {
@@ -245,14 +238,13 @@ export default function Home() {
           setResult(ev);
           syncSplitStates(ev.optimizedPrompt ?? "");
           setClarityScore(ev.clarityScore ?? null);
-          advanceStage(null);
           setStep(3);
           break;
         case "stage":
           // Non-streaming progress. Move to step 3 and ensure a result object
           // exists so the result panel renders its loading state — even before
           // the `meta` event populates RAG sources.
-          if (ev.key) advanceStage(ev.key);
+          if (ev.key) recordTimelineEvent(ev);
           setResult((prev) => prev ?? { streaming: true, ragSources: [] });
           setStep(3);
           break;
@@ -266,20 +258,25 @@ export default function Home() {
           // Show it now — the user can read and copy while quality is checked.
           setResult((prev) => ({ ...(prev ?? {}), streaming: true, draft: true }));
           syncSplitStates(ev.optimizedPrompt ?? "");
+          recordTimelineEvent(ev);
           break;
         case "done":
           // The server already selected the final prompt (V1 or refined V2);
           // `optimizedPrompt` carries it for the structured-output parser.
           setResult({ ...ev, streaming: false });
           syncSplitStates(ev.optimizedPrompt ?? ev.finalPrompt ?? "");
-          advanceStage(null);
+          setCopyStale(isCopyStale(
+            copiedPromptRef.current,
+            parseStructuredOutput(ev.optimizedPrompt ?? ev.finalPrompt ?? "").prompt
+          ));
+          recordTimelineEvent(ev);
           break;
         case "error":
           setError(ev.error || "Stream error");
           // Clear `streaming` too, or the result panel keeps shimmering its
           // loading skeleton forever behind the error banner.
           setResult((prev) => (prev ? { ...prev, streaming: false } : prev));
-          advanceStage(null);
+          recordTimelineEvent(ev);
           break;
       }
     };
@@ -375,6 +372,8 @@ export default function Home() {
     setClarityScore(null);
     setClarifyRound(0);
     setCopied(false);
+    setCopyStale(false);
+    copiedPromptRef.current = null;
     setJustCompleted(false);
     didAutoScrollRef.current = false;
   }
@@ -389,11 +388,16 @@ export default function Home() {
 
   async function handleCopy() {
     if (!optimizedPrompt) return;
+    const textToCopy = optimizedPrompt;
+    copiedPromptRef.current = textToCopy;
+    setCopyStale(false);
     try {
-      await navigator.clipboard.writeText(optimizedPrompt);
+      await navigator.clipboard.writeText(textToCopy);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-    } catch { /* clipboard denied — silent */ }
+    } catch {
+      if (copiedPromptRef.current === textToCopy) copiedPromptRef.current = null;
+    }
   }
 
   // "Agentic process is active" whenever we're waiting on the server —
@@ -489,6 +493,7 @@ export default function Home() {
                 result={result}
                 targetModel={targetModel}
                 copied={copied}
+                copyStale={copyStale}
                 onCopy={handleCopy}
                 onStartOver={handleStartOver}
                 powerMode={powerMode}
@@ -840,6 +845,7 @@ function StepResult({
   result,
   targetModel,
   copied,
+  copyStale,
   onCopy,
   onStartOver,
   powerMode,
@@ -855,6 +861,7 @@ function StepResult({
   // the judge (and optional refinement) finish in the background.
   const loading = streaming && !optimizedPrompt;
   const checkingQuality = streaming && Boolean(optimizedPrompt);
+  const reviewStatus = deriveReviewStatus(result);
 
   return (
     <div className="p-6 sm:p-8">
@@ -866,11 +873,6 @@ function StepResult({
             {result?.cacheHit && (
               <span className="ml-2 rounded-md bg-success/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success">
                 Cached
-              </span>
-            )}
-            {result?.refinementSuccessful && (
-              <span className="ml-2 rounded-md bg-success/15 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-success">
-                Refined
               </span>
             )}
           </p>
@@ -940,12 +942,25 @@ function StepResult({
                   hint={checkingQuality ? "you can copy this draft now" : null}
                 />
               )}
+              {reviewStatus.state && (
+                <div className="mb-3 text-[12px] leading-relaxed text-text-muted" aria-live="polite">
+                  <p className={reviewStatus.state === "revised" ? "font-semibold text-text" : ""}>
+                    {reviewStatus.text}
+                  </p>
+                  {reviewStatus.insight && <p className="mt-1">Why it was updated: {reviewStatus.insight}</p>}
+                </div>
+              )}
               <pre className="whitespace-pre-wrap break-words font-mono text-[13px] leading-relaxed text-text">
                 {optimizedPrompt}
                 {!optimizedPrompt && !streaming && (
                   <span className="text-text-dim italic">No prompt returned.</span>
                 )}
               </pre>
+              {copyStale && (
+                <p className="mt-3 text-[12px] leading-relaxed text-text-muted" aria-live="polite">
+                  The prompt was updated after review — copy the latest version.
+                </p>
+              )}
             </>
           )}
         </div>
@@ -1063,8 +1078,6 @@ function GeneratingSkeleton({ progress, sourceCount }) {
 // judge runs, and briefly after `done`).
 // ═══════════════════════════════════════════════════════════════════════════
 
-const EMPTY_PROGRESS = { stages: {}, active: null, startedAt: null, endedAt: null };
-
 const STAGE_STEPS = [
   { key: "retrieving", label: "Finding best practices", slowAfterMs: 15000 },
   { key: "optimizing", label: "Drafting prompt", slowAfterMs: 30000 },
@@ -1075,7 +1088,8 @@ const STAGE_STEPS = [
 const fmtSecs = (ms) => `${Math.max(0, Math.round(ms / 1000))}s`;
 
 function StageStepper({ progress, sourceCount = 0, compact = false, hint = null }) {
-  const { stages, active, startedAt, endedAt } = progress ?? EMPTY_PROGRESS;
+  const timeline = progress ?? EMPTY_STAGE_TIMELINE;
+  const { stages, active, startedAt, endedAt } = timeline;
 
   // 1Hz tick while a stage is active so the elapsed counter moves.
   const [now, setNow] = useState(() => Date.now());
@@ -1086,7 +1100,7 @@ function StageStepper({ progress, sourceCount = 0, compact = false, hint = null 
   }, [active]);
 
   // After completion, keep the compact row visible briefly, then hide it.
-  const finished = Boolean(endedAt) && !active;
+  const finished = endedAt != null && !active;
   const [showFinished, setShowFinished] = useState(true);
   useEffect(() => {
     if (!finished) { setShowFinished(true); return; }
@@ -1099,9 +1113,9 @@ function StageStepper({ progress, sourceCount = 0, compact = false, hint = null 
   const rows = STAGE_STEPS.map((step) => {
     const st = stages[step.key];
     let state = "pending";
-    if (st?.end) state = "done";
+    if (st?.end != null) state = "done";
     else if (st && step.key === active) state = "active";
-    const elapsed = st ? (st.end ?? now) - st.start : 0;
+    const elapsed = getStageElapsedMs(timeline, step.key, now);
     const slow = state === "active" && elapsed > step.slowAfterMs;
     let label = step.label;
     if (step.key === "retrieving" && state === "done") {
@@ -1131,7 +1145,7 @@ function StageStepper({ progress, sourceCount = 0, compact = false, hint = null 
             {r.slow && <span className="text-[11px] text-text-dim">· taking longer than usual</span>}
           </span>
         ))}
-        {finished && startedAt && (
+        {finished && startedAt != null && (
           <span className="inline-flex items-center gap-1.5 text-success">
             <StepGlyph state="done" />
             <span>Ready in {fmtSecs(endedAt - startedAt)}</span>
@@ -1424,6 +1438,10 @@ function QualityDashboard({ result }) {
           {judged ? "GPT-5-mini judge" : "Ragas"}
         </div>
       </div>
+
+      {result?.refinementSuccessful && (
+        <p className="mt-3 text-[12px] text-text-muted">Scores for the initial draft (before revision)</p>
+      )}
 
       <div className="mt-4 space-y-3">
         {metrics.map((m) => (
