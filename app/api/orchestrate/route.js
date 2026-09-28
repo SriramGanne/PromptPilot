@@ -13,6 +13,7 @@ import { selectResearchWithinBudget, formatResearchRecord } from "../../../lib/r
 import { getCitedSources } from "../../../lib/researchCitations.mjs";
 import { getTechniqueVocabulary, buildRetrievalQuerySystem } from "../../../lib/vaultTaxonomy.mjs";
 import { hasSuppliedSourceBlock, hasMissingSourceMaterial, ensureSourceMaterialInPrompt } from "../../../lib/sourceMaterialGuard.mjs";
+import { hasSuppliedQuantities, ensureSuppliedQuantitiesInPrompt } from "../../../lib/suppliedDetailsGuard.mjs";
 
 // The pipeline (retrieve → draft → judge → optional refine) normally finishes
 // in ~20s but can approach a minute when Together is under load and refinement
@@ -127,6 +128,7 @@ Your output is a PROMPT that will later be sent to a SEPARATE AI model. You must
 - If the Raw Intent is "help me run X locally", you do NOT write the setup steps — you write a prompt that *instructs an AI* to produce those setup steps.
 - The text inside \`### PROMPT START\` must be reusable INSTRUCTIONS for an AI: a role, the task, constraints, and the desired output format — using placeholders (e.g. [APP_NAME], [REPO_URL]) wherever specifics are unknown.
 - If the user supplied text to summarize or rewrite, data, a draft, notes, or examples, carry that material verbatim into the prompt inside a clearly delimited source-material block. Choose a delimiter that does not occur in the material; follow the target model's formatting hint. Use placeholders only for information the user did not supply. Embedding source material for the later AI is not answering the user's request.
+- Treat supplied numbers and their units as fixed facts. For example, "20 members" must remain "20 members", never [NUMBER_OF_MEMBERS] or [NUMBER_OF_MEMBERS — default 20].
 - It must NOT contain a finished answer, real example output, concrete step-by-step content, code, or links that fulfil the request. If you catch yourself writing the answer, stop and rewrite it as an instruction telling an AI to produce that answer.
 
 ## OPERATIONAL FRAMEWORK:
@@ -405,7 +407,7 @@ WORKED EXAMPLE — the \`### PROMPT START\` block is INSTRUCTIONS, never an answ
 Raw Intent: "help me write a cover letter for a marketing job"
 
 CORRECT content for the PROMPT START block:
-You are an expert career coach and copywriter. Write a tailored cover letter for the role of [JOB_TITLE] at [COMPANY], using the candidate background: [CANDIDATE_BACKGROUND]. Tone: [TONE — default professional and warm]. Keep it under [WORD_LIMIT — default 350] words across 3–4 paragraphs: open with a specific hook, map 2–3 achievements to the role's needs, and close with a clear call to action. Do NOT invent facts that were not provided.
+You are an expert career coach and copywriter. Write a tailored cover letter for the role of [JOB_TITLE] at [COMPANY], using the candidate background: [CANDIDATE_BACKGROUND]. Tone: [TONE]. Keep it under [WORD_LIMIT] words across 3–4 paragraphs: open with a specific hook, map 2–3 achievements to the role's needs, and close with a clear call to action. Do NOT invent facts that were not provided.
 
 WRONG — do NOT do this, it ANSWERS the request instead of instructing an AI:
 "Dear Hiring Manager, I am excited to apply for the marketing position at your company..."
@@ -577,10 +579,10 @@ export async function POST(request) {
 
         // ── Semantic cache ────────────────────────────────────────────────
         const queryEmbedding = await queryEmbeddingPromise;
-        // Similar requests can contain different source text; reuse would return
-        // another user's material instead of the material supplied here.
-        const hasSuppliedSource = hasSuppliedSourceBlock(userInput);
-        const cached = queryEmbedding && !hasSuppliedSource
+        // Similar requests can contain different source text or quantities;
+        // reuse could return another request's fixed details.
+        const hasRequestSpecificDetails = hasSuppliedSourceBlock(userInput) || hasSuppliedQuantities(userInput);
+        const cached = queryEmbedding && !hasRequestSpecificDetails
           ? await getCachedResult(queryEmbedding, targetModel)
           : null;
         if (cached) {
@@ -679,7 +681,10 @@ export async function POST(request) {
         if (hasMissingSourceMaterial(userInput, v1Output)) {
           console.warn("[generate] synthesis omitted supplied source material; restoring it before review.");
         }
-        v1Output = ensureSourceMaterialInPrompt(userInput, v1Output);
+        v1Output = ensureSuppliedQuantitiesInPrompt(
+          userInput,
+          ensureSourceMaterialInPrompt(userInput, v1Output)
+        );
 
         // ── Draft ─────────────────────────────────────────────────────────
         // Show V1 now rather than after the judge: the judge + refinement
@@ -722,7 +727,10 @@ export async function POST(request) {
 
           refinementLatencyMs = refineRes.latencyMs ?? null;
           if (refineRes.ok) {
-            finalPrompt = ensureSourceMaterialInPrompt(userInput, refineRes.refinedPrompt);
+            finalPrompt = ensureSuppliedQuantitiesInPrompt(
+              userInput,
+              ensureSourceMaterialInPrompt(userInput, refineRes.refinedPrompt)
+            );
             refinementSuccessful = true;
           } else {
             console.warn(`[eval-layer] refinement fell back to V1 (reason: ${refineRes.reason})`);
@@ -776,7 +784,7 @@ export async function POST(request) {
         controller.close();
 
         // ── Fire-and-forget: cache write + metrics log ────────────────────
-        if (queryEmbedding && !hasSuppliedSource) {
+        if (queryEmbedding && !hasRequestSpecificDetails) {
           setCachedResult(queryEmbedding, targetModel, finalPayload).catch((err) =>
             console.warn("Cache write failed (non-fatal):", err.message)
           );
